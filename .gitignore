@@ -1,0 +1,32 @@
+# 분석 데이터 (대용량, 재생성 가능)
+cache/
+uploads/
+output/
+paragraph/
+prime/
+pre_prime/
+refine_para/
+debug/
+attach_sent/
+load_file/
+engines/
+issue_index/
+
+# 환경변수
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 법령 JSON 원본 (대용량 635MB, 재다운로드 가능 - build_law_history_db.py 사용)
+law/**/MST_*.json
+law/**/_mst_list.json
+lsHistory_test.html
+
+# 기타
+*.db
+*.sqlite3

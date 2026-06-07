@@ -1,0 +1,360 @@
+# agents/insight_agent.py
+#
+# Plan → Execute → Reflect → Report
+#
+# 인간 전문가(변호사/세무사)의 사고 흐름을 그대로 구현:
+#   1. Planner   — 질문 분해, 검색 쿼리 + 관련 법령 추출
+#   2. Executor  — 단일 Neo4j 연결로 검색·패턴분석·법령조회 일괄 실행
+#   3. Insight   — case_id 제공 시 원문 기반 ExportC deep analysis
+#   4. Critic    — 결과 충분성 평가, 미달이면 Executor 재실행 (최대 1회)
+#   5. Reporter  — 수집된 증거 전체를 실무 보고서로 종합
+#
+# 기존 multi_agent.py 대비 개선점:
+#   - Planner 추가: 쿼리를 맹목적으로 넘기지 않고 검색 전략을 먼저 수립
+#   - 연결 재사용: LegalGraphSearch를 매 tool 호출마다 열고 닫지 않음
+#   - Critic loop: 결과가 부족하면 검색어를 확장해 재시도
+#   - 컨텍스트 연결: Reporter가 모든 이전 결과를 구조화된 형태로 수신
+#   - 보고서 품질: 판례번호·결론 등 구체적 근거 포함 강제
+
+import json
+from typing import List, Optional, TypedDict
+
+from langchain_core.messages import HumanMessage
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, StateGraph
+
+from bravo.models_bravo import IssueLogic
+from db.graph_search import LegalGraphSearch
+from export.export_chain import ExportCChain
+from export.models_export import ExportCInput
+from utils.cache import load_cache
+
+_llm = ChatOpenAI(model="gpt-4.1", temperature=0)
+_MAX_RETRIES = 1
+
+
+# ── State ─────────────────────────────────────────────────────────────────────
+
+class InsightState(TypedDict):
+    query: str
+    case_id: Optional[str]
+
+    # Planner 출력
+    search_queries: List[str]   # 분해된 쟁점 검색어
+    statute_names: List[str]    # 조회할 법령명
+
+    # Executor 출력
+    search_results: Optional[list]
+    pattern_results: Optional[dict]
+    statute_results: Optional[list]
+
+    # Insight (case_id 있을 때)
+    insight_result: Optional[dict]
+
+    # Critic
+    reflection: Optional[str]   # "sufficient" | "retry"
+    retry_count: int
+
+    # Reporter
+    final_report: Optional[str]
+
+
+# ── 1. Planner ────────────────────────────────────────────────────────────────
+
+def planner_node(state: InsightState) -> InsightState:
+    """
+    질문을 분석해 판례 DB에 적합한 검색 쿼리와 법령명을 추출.
+    예) "국제조세 특수관계자 거래 분석"
+      → search_queries: ["특수관계자간 자산 저가양도 부당행위계산 부인", "이전가격 정상가격 산정 방법"]
+      → statute_names: ["국제조세조정에 관한 법률", "법인세법"]
+    """
+    prompt = (
+        "당신은 조세법률 전문 리서치 플래너다.\n"
+        "아래 질문을 분석해 판례 검색 전략을 JSON으로만 반환하라.\n\n"
+        f"질문: {state['query']}\n\n"
+        "반환 형식 (JSON만, 다른 텍스트 없음):\n"
+        '{"search_queries": ["법적 쟁점 형태의 검색어 1~3개"], '
+        '"statute_names": ["정확한 법령명 0~2개"]}\n\n'
+        "규칙:\n"
+        "- search_queries: 판례 쟁점 DB 검색에 최적화된 형태 "
+        "(예: '특수관계자간 자산 저가양도가 부당행위계산 부인 대상인지')\n"
+        "- statute_names: 법령의 공식 명칭만 (예: '국세기본법', '법인세법')\n"
+        "- 법령 언급이 없으면 statute_names는 빈 배열"
+    )
+    resp = _llm.invoke([HumanMessage(content=prompt)])
+    try:
+        plan = json.loads(resp.content.strip())
+    except Exception:
+        plan = {}
+
+    return {
+        **state,
+        "search_queries": plan.get("search_queries") or [state["query"]],
+        "statute_names": plan.get("statute_names") or [],
+    }
+
+
+# ── 2. Executor ───────────────────────────────────────────────────────────────
+
+def executor_node(state: InsightState) -> InsightState:
+    """
+    단일 Neo4j 연결로 세 가지 조회를 일괄 실행:
+      - search_similar_issues: 쟁점별 유사 판례 (Planner가 분해한 모든 쿼리)
+      - analyze_winning_patterns: 주요 쿼리 기준 승소/패소 패턴
+      - get_statute_cases: 관련 법령별 판례 (법령명이 있을 때만)
+    """
+    queries = state["search_queries"] or [state["query"]]
+    primary_query = queries[0]
+
+    s = LegalGraphSearch()
+    try:
+        all_search: list = []
+        for q in queries:
+            all_search.extend(s.search_similar_issues(q, top_k=5))
+
+        pattern = s.analyze_winning_patterns(primary_query, top_k=10)
+
+        all_statutes: list = []
+        for name in state["statute_names"]:
+            all_statutes.extend(s.get_statute_cases(name))
+    finally:
+        s.close()
+
+    return {
+        **state,
+        "search_results": all_search,
+        "pattern_results": pattern,
+        "statute_results": all_statutes,
+    }
+
+
+# ── 3. Insight ────────────────────────────────────────────────────────────────
+
+def insight_node(state: InsightState) -> InsightState:
+    """case_id가 있을 때 캐시된 원문 기반 ExportC 수준 deep insight 생성."""
+    case_id = state.get("case_id")
+    if not case_id:
+        return {**state, "insight_result": None}
+
+    issue_logic_raw = load_cache(case_id, "issue_logic.json") or {}
+    paragraphs_raw = load_cache(case_id, "paragraphs.json") or []
+    chains = issue_logic_raw.get("issue_logic_chains", []) if isinstance(issue_logic_raw, dict) else issue_logic_raw
+    issue_logic_list = [IssueLogic(**item) for item in chains]
+    block_texts = [
+        (p.get("text", "") if isinstance(p, dict) else str(p))
+        for p in paragraphs_raw
+        if (p.get("text") if isinstance(p, dict) else p)
+    ]
+
+    output = ExportCChain(model="gpt-4.1").run(
+        ExportCInput(issue_logic_list=issue_logic_list, block_texts=block_texts)
+    )
+    return {**state, "insight_result": output.model_dump()}
+
+
+# ── 4. Critic ─────────────────────────────────────────────────────────────────
+
+def critic_node(state: InsightState) -> InsightState:
+    """
+    결과 충분성 평가. 판례가 한 건도 없으면 검색어를 원본 질문으로 확장해 재시도.
+    MAX_RETRIES 초과 시 부족한 채로 보고서 단계로 진행.
+    """
+    search_count = len(state.get("search_results") or [])
+    should_retry = (search_count == 0) and (state["retry_count"] < _MAX_RETRIES)
+
+    extended_queries = (
+        state["search_queries"] + [state["query"]]
+        if should_retry
+        else state["search_queries"]
+    )
+
+    return {
+        **state,
+        "reflection": "retry" if should_retry else "sufficient",
+        "retry_count": state["retry_count"] + 1,
+        "search_queries": extended_queries,
+    }
+
+
+def _route_after_critic(state: InsightState) -> str:
+    return "executor" if state["reflection"] == "retry" else "report"
+
+
+# ── 5. Reporter ───────────────────────────────────────────────────────────────
+
+def reporter_node(state: InsightState) -> InsightState:
+    """
+    수집된 모든 데이터를 구조화된 형태로 정제한 뒤 실무 보고서 생성.
+    Reporter는 원시 JSON을 직접 받지 않고 포맷팅된 텍스트를 받는다.
+    """
+    search_block = _fmt_cases(state.get("search_results") or [])
+    pattern_block = _fmt_pattern(state.get("pattern_results") or {})
+    statute_block = _fmt_statutes(state.get("statute_results") or [])
+
+    insight_block = ""
+    if state.get("insight_result"):
+        es = state["insight_result"].get("executive_summary", {})
+        rv = es.get("risk_view", {})
+        jl = es.get("judicial_logic", {})
+        insight_block = (
+            "\n[원문 판례 Deep Insight]\n"
+            f"• 핵심 요지: {es.get('one_liner', '')}\n"
+            f"• 핵심 쟁점: {', '.join(es.get('core_issues', []))}\n"
+            f"• 법원 논거: {jl.get('how_the_court_thought', '')}\n"
+            f"• 납세자 리스크: {rv.get('taxpayer_risk', '')}\n"
+            f"• 판례 시그널: {rv.get('precedent_signal', '')}"
+        )
+
+    statute_section = f"\n[법령별 판례 현황]\n{statute_block}" if statute_block else ""
+
+    prompt = (
+        "당신은 조세법률 전문 리서치 센터의 수석 분석관이다.\n"
+        "아래 분석 결과를 바탕으로 변호사·세무팀이 즉시 활용할 수 있는 통합 보고서를 작성하라.\n\n"
+        f"[분석 요청]\n{state['query']}\n\n"
+        f"[유사 판례 검색 결과]\n{search_block}\n\n"
+        f"[승소/패소 패턴 분석]\n{pattern_block}"
+        f"{statute_section}"
+        f"{insight_block}\n\n"
+        "[보고서 구성 — 반드시 아래 순서]\n"
+        "1. 핵심 요약 (2~3문장): 판례군 전체를 관통하는 법리 방향성\n"
+        "2. 주요 판례 시사점 (3~5 bullet): 판례번호·법원명·판결 결론 반드시 포함\n"
+        "3. 승소 전략 포인트 (3~5 bullet): 패턴에서 도출한 구체적 전략, 수치/법령 근거 포함\n"
+        "4. 리스크 경고 (2~3 bullet): 납세자·과세관청 각각의 취약점과 리스크 현실화 조건\n"
+        "5. 실무 체크리스트 (3~5개): 지금 당장 행동 가능한 항목\n\n"
+        "[엄격한 규칙]\n"
+        "- 분석 데이터에 없는 판례·법령·사실 생성 절대 금지\n"
+        "- '관련 법령을 검토해야 한다' 같은 추상적 조언 금지 → 구체적 조문·판례번호 명시\n"
+        "- 판결문 문체 금지 → 실무자 보고서 톤 (간결·직접적)\n"
+        "- 각 bullet은 근거 데이터가 없으면 작성하지 말 것"
+    )
+
+    result = _llm.invoke([HumanMessage(content=prompt)])
+    return {**state, "final_report": result.content}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _fmt_cases(cases: list) -> str:
+    if not cases:
+        return "(검색 결과 없음)"
+    seen: set = set()
+    lines: list = []
+    for c in cases:
+        cid = c.get("case_id") or c.get("case_number", "")
+        if cid in seen or len(lines) >= 8:
+            continue
+        seen.add(cid)
+        issue_preview = str(c.get("issue", ""))[:60]
+        lines.append(
+            f"• [{c.get('case_number', '')}] {c.get('court_name', '')} "
+            f"{c.get('judgment_date', '')} → {c.get('conclusion', '')} | "
+            f"쟁점: {issue_preview}"
+        )
+    return "\n".join(lines)
+
+
+def _fmt_pattern(pattern: dict) -> str:
+    if not pattern:
+        return "(패턴 분석 없음)"
+    cases = pattern.get("related_cases", [])
+    statutes = pattern.get("statutes_cited", [])
+    win_keywords = {"인용", "납세자 승", "취소", "경정"}
+    win = sum(
+        1 for c in cases
+        if any(kw in str(c.get("conclusion", "")) for kw in win_keywords)
+    )
+    top_statutes = (
+        ", ".join(s["statute"] for s in statutes[:5]) if statutes else "없음"
+    )
+    return (
+        f"분석 판례: {len(cases)}건 | "
+        f"납세자 유리: {win}건 / 과세관청 유리: {len(cases) - win}건\n"
+        f"주요 인용 법령: {top_statutes}"
+    )
+
+
+def _fmt_statutes(statute_cases: list) -> str:
+    lines = [
+        f"• [{c.get('case_number', '')}] {c.get('statute', '')} "
+        f"{c.get('provision', '')} → {c.get('conclusion', '')}"
+        for c in statute_cases[:5]
+    ]
+    return "\n".join(lines)
+
+
+# ── Graph ─────────────────────────────────────────────────────────────────────
+
+def _build_graph():
+    g = StateGraph(InsightState)
+    g.add_node("planner", planner_node)
+    g.add_node("executor", executor_node)
+    g.add_node("insight", insight_node)
+    g.add_node("critic", critic_node)
+    g.add_node("report", reporter_node)
+
+    g.set_entry_point("planner")
+    g.add_edge("planner", "executor")
+    g.add_edge("executor", "insight")
+    g.add_edge("insight", "critic")
+    g.add_conditional_edges(
+        "critic",
+        _route_after_critic,
+        {"executor": "executor", "report": "report"},
+    )
+    g.add_edge("report", END)
+    return g.compile()
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
+
+class InsightAgent:
+    """
+    Plan-Execute-Reflect-Report 패턴의 법률 인사이트 에이전트.
+
+    Usage:
+        agent = InsightAgent()
+
+        # 검색 + 패턴 분석
+        result = agent.run("국제조세조정법 특수관계자 거래 판례 분석해줘")
+
+        # 검색 + 패턴 + ExportC 수준 deep insight
+        result = agent.run("특수관계자 거래 리스크", case_id="2023누1234")
+
+        result["final_report"]  # 최종 보고서 (str)
+        result["insight"]       # ExportC deep insight (dict, case_id 제공 시)
+        result["steps"]         # 실행 단계 목록
+    """
+
+    def __init__(self):
+        self.graph = _build_graph()
+
+    def run(self, query: str, case_id: Optional[str] = None) -> dict:
+        initial: InsightState = {
+            "query": query,
+            "case_id": case_id,
+            "search_queries": [],
+            "statute_names": [],
+            "search_results": None,
+            "pattern_results": None,
+            "statute_results": None,
+            "insight_result": None,
+            "reflection": None,
+            "retry_count": 0,
+            "final_report": None,
+        }
+        final = self.graph.invoke(initial)
+
+        steps = ["planned", "executed"]
+        if final.get("insight_result"):
+            steps.append("deep_insight")
+        steps.append(f"critic:{final.get('reflection', 'sufficient')}")
+        if final.get("retry_count", 1) > 1:
+            steps.append(f"retried({final['retry_count'] - 1}x)")
+        steps.append("reported")
+
+        return {
+            "query": final["query"],
+            "final_report": final["final_report"],
+            "insight": final["insight_result"],
+            "steps": steps,
+        }

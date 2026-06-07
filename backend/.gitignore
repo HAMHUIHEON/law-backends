@@ -1,0 +1,10 @@
+__pycache__/
+.env
+.venv/
+venv/
+.env.*
+*.sqlite3
+*.db
+claude_desktop_config.json
+.mcp.json
+CLAUDE.md

@@ -1,182 +1,22 @@
-# app.py
-from __future__ import annotations
-import json
-import os
-import re
-from typing import Any, Dict, List, Literal, Optional, Tuple
-from fastapi import FastAPI, HTTPException, Query
-from fastapi import FastAPI, APIRouter,UploadFile, File, HTTPException
+#29_FINAL/backend/routers/law.py
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pathlib import Path
-import json
-from fastapi.middleware.cors import CORSMiddleware
-from bravo.full_pipeline import run_full_pipeline
-from export.full_report import (
-    run_export_pipeline_A,
-    run_export_pipeline_B,
-    run_export_pipeline_C,
-)
-
-from fastapi import FastAPI
-from typing import List, Dict
+from typing import List, Dict, Any, Literal
 import os
-from neo4j import GraphDatabase
-
-from dotenv import load_dotenv
-load_dotenv()
-router = APIRouter()
-
-#.\neo4j.bat console
-NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
-NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD")
-
-print("URI:", NEO4J_URI)
-print("USER:", NEO4J_USER)
-print("PASSWORD:", NEO4J_PASSWORD)
-
-driver = GraphDatabase.driver(
-    NEO4J_URI,
-    auth=(NEO4J_USER, NEO4J_PASSWORD),
-)
-
-
-app = FastAPI(title="Themis Law API")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],   # ← 이게 핵심
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-@app.post("/api/cases/upload-and-run")
-async def upload_and_run_case(file: UploadFile = File(...)):
-    # 1) PDF 저장
-    upload_dir = Path("uploads")
-    upload_dir.mkdir(exist_ok=True)
-
-    pdf_path = upload_dir / file.filename
-    content = await file.read()
-    pdf_path.write_bytes(content)
-
-    case_id = pdf_path.stem
-
-    # 2) 풀 파이프라인 실행 (raw→bravo→issue_logic→citations까지)
-    pipeline_result = run_full_pipeline(str(pdf_path))
-
-    # 3) export pipelines
-    report_A = run_export_pipeline_A(case_id)
-    report_B = run_export_pipeline_B(case_id)
-    report_C = run_export_pipeline_C(case_id)
-
-    return {
-        "case_id": case_id,
-        "report_A": report_A,
-        "report_B": report_B,
-        "report_C": report_C,
-    }
-
-from pathlib import Path
-from typing import Optional
 import json
-from fastapi import HTTPException
-
-CACHE_ROOT = Path("cache")
-
-def _normalize_case_id(case_id: str) -> str:
-    """
-    업로드 파일명 stem이 '서울중앙지방법원_2021노2087'처럼 들어오는 경우 대비.
-    가장 마지막 '_' 뒤를 사건번호로 보는 fallback.
-    """
-    s = (case_id or "").strip()
-    if "_" in s:
-        return s.split("_")[-1].strip()
-    return s
-
-def find_case_dir_by_suffix(case_id: str) -> Optional[Path]:
-    """
-    cache 폴더 아래에서 '*_{case_id}' 로 끝나는 디렉터리를 찾는다.
-    """
-    if not CACHE_ROOT.exists():
-        return None
-
-    target_suffix = f"_{case_id}"
-    for d in CACHE_ROOT.iterdir():
-        if d.is_dir() and d.name.endswith(target_suffix):
-            return d
-    return None
-
-def resolve_report_json_path(case_id: str, report_filename: str) -> Path:
-    """
-    1) 기존 하드코딩 경로 (호환 유지)
-    2) cache/*_{case_id}/report_filename 자동 탐색
-    3) case_id가 '법원명_사건번호' 형태면 사건번호만으로도 탐색
-    """
-    # (1) 기존 규칙 그대로 먼저 시도
-    legacy = CACHE_ROOT / f"지방법원_{case_id}" / report_filename
-    if legacy.exists():
-        return legacy
-
-    # (2) suffix 탐색
-    d = find_case_dir_by_suffix(case_id)
-    if d:
-        p = d / report_filename
-        if p.exists():
-            return p
-
-    # (3) normalize fallback
-    normalized = _normalize_case_id(case_id)
-    if normalized != case_id:
-        legacy2 = CACHE_ROOT / f"지방법원_{normalized}" / report_filename
-        if legacy2.exists():
-            return legacy2
-
-        d2 = find_case_dir_by_suffix(normalized)
-        if d2:
-            p2 = d2 / report_filename
-            if p2.exists():
-                return p2
-
-    raise HTTPException(status_code=404, detail=f"{report_filename} not found for case_id={case_id}")
-
-
-@app.get("/api/cases/{case_id}/report-a")
-def get_report_a(case_id: str):
-    path = resolve_report_json_path(case_id, "export_A_full.json")
-
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    return data
-
-
-@app.get("/api/cases/{case_id}/report-b")
-def get_report_b(case_id: str):
-    path = resolve_report_json_path(case_id, "export_B_full.json")
-
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    return data
-
-
-@app.get("/api/cases/{case_id}/report-c")
-def get_report_c(case_id: str):
-    path = resolve_report_json_path(case_id, "export_C_full.json")
-
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    return data
-
-
-
+import re
 from datetime import datetime
-from fastapi import HTTPException
+from utils_B.normalize import normalize_article_input, to_article_id
+from db.neo4j_client import driver
 
-@app.get("/api/law/snapshot/by-date")
+router = APIRouter()
+Scope = Literal["LAW", "DECREE", "RULE"]
+
+#==========================================================
+# 법령 통합 뷰 API (Integrated Law View API)   
+# ✅ snapshot
+#==========================================================
+@router.get("/snapshot/by-date")
 def get_snapshot_by_date(as_of: str | None = None):
     # 디폴트: 오늘 (YYYYMMDD)
     if not as_of:
@@ -220,7 +60,7 @@ def get_snapshot_by_date(as_of: str | None = None):
         "effective_at": str(r["effective_at"]) if r["effective_at"] else None,
     }
 
-@app.get("/api/law/snapshots")
+@router.get("/snapshots")
 def list_law_snapshots():
     query = """
     MATCH (s:IntegratedSnapshot {scope:"INTEGRATED"})
@@ -253,7 +93,9 @@ def list_law_snapshots():
 
     return snapshots
 
-
+# ---------------------------------------------------------
+# ✅ chapter 챕터 그래프 API   
+# ---------------------------------------------------------    
 # 공통 유틸 Neo4j 결과를 **그래프 JSON(nodes/edges)**로 바꾸는 최소 유틸
 def add_node(nodes, node_id, node_type, label=None, meta=None):
     if node_id not in nodes:
@@ -275,7 +117,7 @@ LAW_20251001_21065__DECREE_20251128_35882__RULE_20250321_01114
 1️⃣ 메인 그래프 (대표 화면)
 Reasoning ↔ Semantic ↔ Article를 한 번에.
 """
-@app.get("/api/law/chapters/{chapter_id}/graph")
+@router.get("/chapters/{chapter_id}/graph")
 def get_chapter_graph(chapter_id: str, set_key: str):
     query = """
     MATCH (ic:IntegratedChapter {
@@ -386,7 +228,7 @@ def get_chapter_graph(chapter_id: str, set_key: str):
 
 
 # 2️⃣ 구조 뷰 (Structure)
-@app.get("/api/law/chapters/{chapter_id}/structure")
+@router.get("/chapters/{chapter_id}/structure")
 def get_structure(chapter_id: str, set_key: str):
     query = """
     MATCH (s:IntegratedSnapshot {set_key:$set_key})
@@ -506,7 +348,7 @@ def get_structure(chapter_id: str, set_key: str):
         "edges": edges,
     }
 
-@app.get("/api/law/chapters")
+@router.get("/chapters")
 def get_chapters(set_key: str):
     query = """
     MATCH (s:IntegratedSnapshot {set_key:$set_key})
@@ -528,9 +370,12 @@ def get_chapters(set_key: str):
 
     return chapters
 
-
+# ---------------------------------------------------------
+# ✅ chapter 챕터 텍스트 API    
 # 3️⃣ 쟁점 뷰 (Semantic)
-@app.get("/api/law/chapters/{chapter_id}/semantic")
+# ✅ semantic / reasoning (cache read-only)
+# ---------------------------------------------------------
+@router.get("/chapters/{chapter_id}/semantic")
 def get_chapter_semantic(chapter_id: str, set_key: str):
     """
     Semantic (쟁점) 텍스트 전용 API
@@ -584,7 +429,7 @@ def get_chapter_semantic(chapter_id: str, set_key: str):
     }
 
 # 3️⃣-2 검토 단계 뷰 (Reasoning)
-@app.get("/api/law/chapters/{chapter_id}/reasoning")
+@router.get("/chapters/{chapter_id}/reasoning")
 def get_chapter_reasoning(chapter_id: str, set_key: str):
     """
     Reasoning (검토 단계) 텍스트 전용 API
@@ -634,8 +479,12 @@ def get_chapter_reasoning(chapter_id: str, set_key: str):
     }
 
 
-# 4-1. 조문 정독 리뷰
-@app.get("/api/law/norm/article")
+# ---------------------------------------------------------
+# ✅ 조문 텍스트 API    
+# 조문 정독용 (항/호/목 포함) 
+#---------------------------------------------------------
+
+@router.get("/norm/article")
 def get_norm_article(
     law_name: str,
     version_key: str,
@@ -688,13 +537,16 @@ def get_norm_article(
         "norm_units": article.get("norm_units", []),
     }
 
-
+# ---------------------------------------------------------
+# ✅ 조문 텍스트 API    
 # 4️⃣ 역조문 조회, 근거 뷰 (ReasoningStep→Article)
-@app.get("/api/law/articles/{article_id}/reverse/full")
+# ---------------------------------------------------------
+
+@router.get("/articles/{article_id}/reverse/full")
 def reverse_lookup_article_full(
     article_id: str,
     set_key: str = Query(...),
-    scope: str = Query(..., regex="^(LAW|DECREE|RULE)$"),
+    scope: str = Query(..., pattern="^(LAW|DECREE|RULE)$"),
     law_name: str = Query(...),
     version_key: str = Query(...),
 ):
@@ -754,50 +606,6 @@ def reverse_lookup_article_full(
         "usages": rows,
     }
 
-# ---------------------------------------------------------
-# API
-# ---------------------------------------------------------
-
-# ---------------------------------------------------------
-# 조문 조회 (set_key 기준, LAW / DECREE / RULE)
-# ---------------------------------------------------------
-# 조문 조회-세트키로
-Scope = Literal["LAW", "DECREE", "RULE"]
-
-_ART_INPUT_RE = re.compile(r"[^0-9의]")
-
-def normalize_article_input(raw: str) -> str:
-    """
-    "65" / "65조" / "65 의 2" / "65의2"  -> "65" or "65_2"
-    """
-    if raw is None:
-        return ""
-
-    s = raw.strip()
-    s = s.replace("조", "")
-    s = s.replace(" ", "")
-    s = _ART_INPUT_RE.sub("", s)
-
-    if not s:
-        return ""
-
-    if "의" in s:
-        base, sub = s.split("의", 1)
-        base = re.sub(r"[^0-9]", "", base)
-        sub = re.sub(r"[^0-9]", "", sub)
-        if not base or not sub:
-            return ""
-        return f"{int(base)}_{int(sub)}"
-
-    base = re.sub(r"[^0-9]", "", s)
-    if not base:
-        return ""
-    return f"{int(base)}"
-
-
-def to_article_id(normalized: str) -> str:
-    # "65" -> "ART_65", "65_2" -> "ART_65_2"
-    return f"ART_{normalized}"
 
 
 def iter_all_articles(law_json: Dict[str, Any]):
@@ -869,10 +677,11 @@ def get_scope_versions_from_snapshot(set_key: str) -> List[Dict[str, str]]:
 
 
 # ---------------------------------------------------------
-# API
+# ✅ 조문 텍스트 API    
+# 4️⃣ 역조문 조회, 근거 뷰 (ReasoningStep→Article)    
 # ---------------------------------------------------------
 
-@app.get("/api/law/articles/resolve")
+@router.get("/articles/resolve")
 def resolve_articles(
     set_key: str = Query(..., description="IntegratedSnapshot.set_key"),
     q: str = Query(..., description='article input: "65", "65의2", "65조" 등'),

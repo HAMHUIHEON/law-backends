@@ -1,0 +1,308 @@
+{
+  "11210": {
+    "version_key": "LAW_20120126_11210",
+    "pdate": "20120126",
+    "pno": "11210",
+    "eff_date": "20120126",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_122383.json"
+  },
+  "11613": {
+    "version_key": "LAW_20130101_11613",
+    "pdate": "20130101",
+    "pno": "11613",
+    "eff_date": "20130702",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_131388.json"
+  },
+  "11873": {
+    "version_key": "LAW_20130607_11873",
+    "pdate": "20130607",
+    "pno": "11873",
+    "eff_date": "20130701",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_141068.json"
+  },
+  "12172": {
+    "version_key": "LAW_20140101_12172",
+    "pdate": "20140101",
+    "pno": "12172",
+    "eff_date": "20140101",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_149367.json"
+  },
+  "13627": {
+    "version_key": "LAW_20151229_13627",
+    "pdate": "20151229",
+    "pno": "13627",
+    "eff_date": "20151229",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_178140.json"
+  },
+  "14049": {
+    "version_key": "LAW_20160302_14049",
+    "pdate": "20160302",
+    "pno": "14049",
+    "eff_date": "20160302",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_181384.json"
+  },
+  "16108": {
+    "version_key": "LAW_20181231_16108",
+    "pdate": "20181231",
+    "pno": "16108",
+    "eff_date": "20190101",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_206316.json"
+  },
+  "17651": {
+    "version_key": "LAW_20201222_17651",
+    "pdate": "20201222",
+    "pno": "17651",
+    "eff_date": "20210101",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_224317.json"
+  },
+  "17758": {
+    "version_key": "LAW_20201229_17758",
+    "pdate": "20201229",
+    "pno": "17758",
+    "eff_date": "20210101",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_224843.json"
+  },
+  "17761": {
+    "version_key": "LAW_20201229_17761",
+    "pdate": "20201229",
+    "pno": "17761",
+    "eff_date": "20210101",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_224875.json"
+  },
+  "1695": {
+    "version_key": "LAW_19650403_1695",
+    "pdate": "19650403",
+    "pno": "1695",
+    "eff_date": "19650504",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_54129.json"
+  },
+  "4812": {
+    "version_key": "LAW_19941222_4812",
+    "pdate": "19941222",
+    "pno": "4812",
+    "eff_date": "19950101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_55976.json"
+  },
+  "4668": {
+    "version_key": "LAW_19931231_4668",
+    "pdate": "19931231",
+    "pno": "4668",
+    "eff_date": "19940101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56174.json"
+  },
+  "4667": {
+    "version_key": "LAW_19931231_4667",
+    "pdate": "19931231",
+    "pno": "4667",
+    "eff_date": "19940101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56175.json"
+  },
+  "4284": {
+    "version_key": "LAW_19901231_4284",
+    "pdate": "19901231",
+    "pno": "4284",
+    "eff_date": "19910701",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56176.json"
+  },
+  "3353": {
+    "version_key": "LAW_19801231_3353",
+    "pdate": "19801231",
+    "pno": "3353",
+    "eff_date": "19810101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56177.json"
+  },
+  "2936": {
+    "version_key": "LAW_19761222_2936",
+    "pdate": "19761222",
+    "pno": "2936",
+    "eff_date": "19770101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56178.json"
+  },
+  "2932": {
+    "version_key": "LAW_19761222_2932",
+    "pdate": "19761222",
+    "pno": "2932",
+    "eff_date": "19770701",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56179.json"
+  },
+  "2714": {
+    "version_key": "LAW_19741224_2714",
+    "pdate": "19741224",
+    "pno": "2714",
+    "eff_date": "19750101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56180.json"
+  },
+  "2160": {
+    "version_key": "LAW_19700101_2160",
+    "pdate": "19700101",
+    "pno": "2160",
+    "eff_date": "19700101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56181.json"
+  },
+  "2126": {
+    "version_key": "LAW_19690731_2126",
+    "pdate": "19690731",
+    "pno": "2126",
+    "eff_date": "19690731",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56182.json"
+  },
+  "1973": {
+    "version_key": "LAW_19671129_1973",
+    "pdate": "19671129",
+    "pno": "1973",
+    "eff_date": "19671230",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_56183.json"
+  },
+  "199": {
+    "version_key": "LAW_19510507_199",
+    "pdate": "19510507",
+    "pno": "199",
+    "eff_date": "19510607",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_6354.json"
+  },
+  "331": {
+    "version_key": "LAW_19540414_331",
+    "pdate": "19540414",
+    "pno": "331",
+    "eff_date": "19540515",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_6355.json"
+  },
+  "423": {
+    "version_key": "LAW_19561231_423",
+    "pdate": "19561231",
+    "pno": "423",
+    "eff_date": "19561231",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_6356.json"
+  },
+  "515": {
+    "version_key": "LAW_19581229_515",
+    "pdate": "19581229",
+    "pno": "515",
+    "eff_date": "19590101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_6357.json"
+  },
+  "820": {
+    "version_key": "LAW_19611208_820",
+    "pdate": "19611208",
+    "pno": "820",
+    "eff_date": "19620101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_6358.json"
+  },
+  "1209": {
+    "version_key": "LAW_19621208_1209",
+    "pdate": "19621208",
+    "pno": "1209",
+    "eff_date": "19630101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_6359.json"
+  },
+  "7321": {
+    "version_key": "LAW_20041231_7321",
+    "pdate": "20041231",
+    "pno": "7321",
+    "eff_date": "20050101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_66201.json"
+  },
+  "8138": {
+    "version_key": "LAW_20061230_8138",
+    "pdate": "20061230",
+    "pno": "8138",
+    "eff_date": "20070101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_76500.json"
+  },
+  "8829": {
+    "version_key": "LAW_20071231_8829",
+    "pdate": "20071231",
+    "pno": "8829",
+    "eff_date": "20080101",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_82368.json"
+  },
+  "8884": {
+    "version_key": "LAW_20080314_8884",
+    "pdate": "20080314",
+    "pno": "8884",
+    "eff_date": "20080415",
+    "law_name": "조세범처벌법",
+    "mst": "",
+    "file": "MST_84515.json"
+  },
+  "9346": {
+    "version_key": "LAW_20090130_9346",
+    "pdate": "20090130",
+    "pno": "9346",
+    "eff_date": "20280101",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_91417.json"
+  },
+  "9919": {
+    "version_key": "LAW_20100101_9919",
+    "pdate": "20100101",
+    "pno": "9919",
+    "eff_date": "20100101",
+    "law_name": "조세범 처벌법",
+    "mst": "",
+    "file": "MST_98314.json"
+  }
+}
