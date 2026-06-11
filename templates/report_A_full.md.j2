@@ -1,0 +1,67 @@
+# 📘 Case Report – {{ case_id }}
+
+---
+
+## 🧭 Executive Summary
+
+
+{% include "report_A_exec.md.j2" %}
+
+
+---
+
+# 📂 Appendix
+
+---
+
+## 1. 📑 Metadata
+
+| Key | Value |
+|-----|-------|
+{% for k, v in metadata.items() -%}
+| **{{ k }}** | {{ v }} |
+{% endfor %}
+
+---
+
+## 2. 🧵 Narrative Summary
+
+### 2.1 ▶ 사실관계 요약 (Fact Summary)
+{{ narrative.fact_summary }}
+
+---
+
+### 2.2 ▶ 원고 주장 (Plaintiff Arguments)
+{% for arg in narrative.plaintiff_arguments %}
+- {{ arg }}
+{% endfor %}
+
+---
+
+### 2.3 ▶ 피고 주장 (Defendant Arguments)
+{% for arg in narrative.defendant_arguments %}
+- {{ arg }}
+{% endfor %}
+
+---
+
+### 2.4 ▶ 법적 배경 (Legal Context)
+{% for item in narrative.legal_context %}
+- {{ item }}
+{% endfor %}
+
+---
+
+### 2.5 ▶ 법원의 판단 (Court Reasoning)
+{% for item in narrative.court_reasoning %}
+- {{ item }}
+{% endfor %}
+
+---
+
+### 2.6 ▶ 핵심 충돌 포인트 (Core Conflicts)
+{% for item in narrative.core_conflicts %}
+- {{ item }}
+{% endfor %}
+
+---

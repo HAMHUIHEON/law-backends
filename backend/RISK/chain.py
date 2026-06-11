@@ -1,7 +1,7 @@
 #revision
 from typing import List, Optional, Dict
 import json
-from langchain_openai import ChatOpenAI
+from utils.llm import get_llm, DEFAULT_MODEL
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from RISK.models import (RevisionObservationOutput,RevisionObservationInput,
@@ -12,8 +12,8 @@ from RISK.prompt import OBSERVATION_PROMPT,ADDENDA_OBSERVATION_PROMPT,ANNEX_OBSE
 
 
 class RevisionObservationChain:
-    def __init__(self, model: str = "gpt-5.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0)
+    def __init__(self, model: str = DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0)
         self.parser = PydanticOutputParser(pydantic_object=RevisionObservationOutput)
 
         self.prompt = PromptTemplate(
@@ -42,8 +42,8 @@ class RevisionObservationChain:
 
 #부칙
 class AddendaObservationChain:
-    def __init__(self, model: str = "gpt-5.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0)
+    def __init__(self, model: str = DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0)
         self.parser = PydanticOutputParser(
             pydantic_object=AddendaObservationOutput
         )
@@ -68,8 +68,8 @@ class AddendaObservationChain:
 
 #별표
 class AnnexObservationChain:
-    def __init__(self, model: str = "gpt-5.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0)
+    def __init__(self, model: str = DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0)
         self.parser = PydanticOutputParser(
             pydantic_object=AnnexObservationOutput
         )

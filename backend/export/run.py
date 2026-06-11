@@ -1,3 +1,4 @@
+from utils.llm import DEFAULT_MODEL
 #export/run.py
 from __future__ import annotations
 
@@ -114,7 +115,7 @@ def flatten_issue_groups(issue_groups: Dict[str, Any]) -> List[Dict[str, Any]]:
 def run_export_case_B(
     case_id: str,
     *,
-    model: str = "gpt-5.1",
+    model: str = DEFAULT_MODEL,
     max_est_tokens: int = 6500,
 ) -> str:
     from utils.cache import load_cache, save_cache
@@ -394,7 +395,7 @@ def reduce_texts_until_one(
 # -----------------------------------------------------
 # 7) Main: run_export_case_C (NO ISSUE×BLOCK)
 # -----------------------------------------------------
-def run_export_case_C(case_id: str, model: str = "gpt-5.1") -> ExportCOutput:
+def run_export_case_C(case_id: str, model: str = DEFAULT_MODEL) -> ExportCOutput:
     MAX_SAFE_TOKENS = 220_000
     REDUCE_BUDGET = 120_000  # reduce 안정 예산
 

@@ -20,7 +20,7 @@ import json
 from typing import List, Optional, TypedDict
 
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
+from utils.llm import get_llm, DEFAULT_MODEL
 from langgraph.graph import END, StateGraph
 
 from bravo.models_bravo import IssueLogic
@@ -29,7 +29,7 @@ from export.export_chain import ExportCChain
 from export.models_export import ExportCInput
 from utils.cache import load_cache
 
-_llm = ChatOpenAI(model="gpt-4.1", temperature=0)
+_llm = get_llm(model=DEFAULT_MODEL, temperature=0)
 _MAX_RETRIES = 1
 
 
@@ -146,7 +146,7 @@ def insight_node(state: InsightState) -> InsightState:
         if (p.get("text") if isinstance(p, dict) else p)
     ]
 
-    output = ExportCChain(model="gpt-4.1").run(
+    output = ExportCChain(model=DEFAULT_MODEL).run(
         ExportCInput(issue_logic_list=issue_logic_list, block_texts=block_texts)
     )
     return {**state, "insight_result": output.model_dump()}

@@ -3,7 +3,7 @@ import json
 from dotenv import load_dotenv
 load_dotenv('../.env')
 
-from langchain_openai import ChatOpenAI
+from utils.llm import get_llm
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.tools import tool
@@ -37,7 +37,7 @@ def get_statute_cases(statute_name: str) -> str:
     return json.dumps(results, ensure_ascii=False, indent=2)
 
 
-llm = ChatOpenAI(model="gpt-4o", temperature=0)
+llm = get_llm(model="gpt-4o", temperature=0)
 tools = [search_similar_issues, analyze_winning_patterns, get_statute_cases]
 
 prompt = ChatPromptTemplate.from_messages([

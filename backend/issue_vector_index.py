@@ -24,9 +24,9 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 MODEL = "text-embedding-3-small"
 
-CACHE_DIR = Path(r"C:\Users\LG\Documents\langchain-kr\29_FINAL\backend\cache")
+CACHE_DIR = Path(__file__).parent / "cache"
 
-INDEX_DIR = Path("issue_index")
+INDEX_DIR = Path(__file__).parent / "issue_index"
 INDEX_DIR.mkdir(exist_ok=True)
 
 INDEX_FILE = INDEX_DIR / "issue_vectors.pkl"

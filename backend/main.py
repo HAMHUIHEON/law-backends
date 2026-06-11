@@ -2,7 +2,7 @@
 from fastapi import FastAPI, Request
 import requests
 from fastapi.middleware.cors import CORSMiddleware
-from routers import cases, law, agent
+from routers import cases, law, agent, risk, taxtr, court, strategy, taxlaw_prec
 from routers import (publications, publications_a,
                              publications_b, publications_c,
                              publications_d, publications_e, search)
@@ -83,3 +83,8 @@ app.include_router(publications_d.router, prefix="/api/publications/d", tags=["p
 app.include_router(publications_e.router, prefix="/api/publications/e", tags=["publications-e"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
+app.include_router(risk.router, prefix="/api/risk", tags=["risk"])
+app.include_router(taxtr.router, prefix="/api/taxtr", tags=["taxtr"])
+app.include_router(court.router, prefix="/api/court", tags=["court"])
+app.include_router(strategy.router, prefix="/api/strategy", tags=["strategy"])
+app.include_router(taxlaw_prec.router, prefix="/api/prec", tags=["prec"])

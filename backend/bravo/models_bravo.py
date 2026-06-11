@@ -10,12 +10,12 @@ class BravoTopicInput(BaseModel):
     full_text: str
     
 class BravoNarrativeOutput(BaseModel):
-    fact_summary: str
-    plaintiff_arguments: List[str]
-    defendant_arguments: List[str]
-    legal_context: List[str]
-    court_reasoning: List[str]
-    core_conflicts: List[str]
+    fact_summary: str = ""
+    plaintiff_arguments: List[str] = Field(default_factory=list)
+    defendant_arguments: List[str] = Field(default_factory=list)
+    legal_context: List[str] = Field(default_factory=list)
+    court_reasoning: List[str] = Field(default_factory=list)
+    core_conflicts: List[str] = Field(default_factory=list)
 
 #pass_base_b
 class BravoKeywordInput(BaseModel):
@@ -88,5 +88,5 @@ class CitationItem(BaseModel):
     matched_version: Optional[dict] = None  # Neo4j 또는 Claude 조회 결과
 
 class BravoIssueCitationOutput(BaseModel):
-    issue: str
-    citations: List[CitationItem]
+    issue: str = ""
+    citations: List[CitationItem] = Field(default_factory=list)

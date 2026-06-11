@@ -1,0 +1,48 @@
+
+### 🧭 One Liner  
+> {{ one_liner }}
+
+---
+
+### ⚖️ Core Issues  
+{% for item in core_issues %}
+> - {{ item }}
+{% endfor %}
+
+---
+
+### 🧠 Judicial Logic  
+> {{ how_the_court_thought }}
+
+#### 🔍 Legal Context Signals
+{% for tag in legal_context %}
+> - {{ tag }}
+{% endfor %}
+
+---
+
+### 👥 Party Positions
+
+> **Taxpayer**  
+> {{ taxpayer }}
+
+> **Tax Authority**  
+> {{ tax_authority }}
+
+> **Key Contrasts**
+{% for pt in contrasting_points %}
+> - {{ pt }}
+{% endfor %}
+
+---
+
+### ⚠️ Risk View
+
+> **Taxpayer Risk**  
+> {{ taxpayer_risk }}
+
+> **Tax Authority Risk**  
+> {{ tax_authority_risk }}
+
+> **Precedent Signal**  
+> {{ precedent_signal }}

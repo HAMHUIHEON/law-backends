@@ -1,6 +1,8 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import List, Dict, Any
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from issue_vector_index import load_index, search
 

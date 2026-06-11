@@ -20,14 +20,14 @@ import json
 from typing import Annotated, List, Optional, TypedDict
 
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
+from utils.llm import get_llm, DEFAULT_MODEL
 from langgraph.graph import END, StateGraph
 from operator import add as list_add
 
 from db.graph_search import LegalGraphSearch
 from db.itcl_search import ITCLSearch
 
-_llm = ChatOpenAI(model="gpt-4.1", temperature=0)
+_llm = get_llm(model=DEFAULT_MODEL, temperature=0)
 
 
 # ── State ─────────────────────────────────────────────────────────────────────

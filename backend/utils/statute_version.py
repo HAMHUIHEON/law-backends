@@ -18,9 +18,8 @@ from pathlib import Path
 from typing import Optional
 
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
-
-_llm = ChatOpenAI(model="gpt-4.1", temperature=0)
+from utils.llm import get_llm, DEFAULT_MODEL
+_llm = get_llm(model=DEFAULT_MODEL, temperature=0)
 
 # 로컬 법령 버전 DB 루트
 _LAW_DB_ROOT = Path(__file__).parent.parent.parent / "law"

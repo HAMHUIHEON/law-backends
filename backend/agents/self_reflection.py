@@ -7,7 +7,7 @@ import json
 import re
 from typing import TypedDict, Optional, Literal
 
-from langchain_openai import ChatOpenAI
+from utils.llm import get_llm, DEFAULT_MODEL
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from langgraph.graph import StateGraph, END
@@ -104,7 +104,7 @@ class ReflectionState(TypedDict):
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
 def critique_node(state: ReflectionState) -> ReflectionState:
-    llm = ChatOpenAI(model="gpt-4.1", temperature=0)
+    llm = get_llm(model=DEFAULT_MODEL, temperature=0)
 
     prompt = CRITIQUE_PROMPT.format(
         executive_summary_json=json.dumps(
@@ -128,7 +128,7 @@ def critique_node(state: ReflectionState) -> ReflectionState:
 
 
 def refine_node(state: ReflectionState) -> ReflectionState:
-    llm = ChatOpenAI(model="gpt-4.1", temperature=0)
+    llm = get_llm(model=DEFAULT_MODEL, temperature=0)
     parser = PydanticOutputParser(pydantic_object=ExportCOutput)
 
     critique = state["critique"]

@@ -12,13 +12,12 @@ import json
 from typing import Optional, TypedDict
 
 from langchain_core.messages import HumanMessage
-from langchain_openai import ChatOpenAI
-
+from utils.llm import get_llm, DEFAULT_MODEL
 from langgraph.graph import END, StateGraph
 
 from db.graph_search import LegalGraphSearch
 
-_llm = ChatOpenAI(model="gpt-4.1", temperature=0)
+_llm = get_llm(model=DEFAULT_MODEL, temperature=0)
 _MAX_REFLECT = 1
 
 

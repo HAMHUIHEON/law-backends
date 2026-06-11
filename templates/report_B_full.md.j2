@@ -1,0 +1,128 @@
+# 📘 Case Report – {{ case_id }}
+
+---
+
+## 🧭 Executive Summary
+{% include "report_B_exec.md.j2" %}
+
+---
+
+# 📂 Appendix
+
+## 1. 📑 Metadata
+
+| Key | Value |
+|-----|-------|
+{% for k, v in metadata.items() -%}
+| **{{ k }}** | {{ v }} |
+{% endfor %}
+
+---
+
+## 2. 🧵 Narrative Summary
+
+### 2.1 ▶ 사실관계 요약 (Fact Summary)
+{{ narrative.fact_summary }}
+
+---
+
+### 2.2 ▶ 원고 주장 (Plaintiff Arguments)
+{% for arg in narrative.plaintiff_arguments %}
+- {{ arg }}
+{% endfor %}
+
+---
+
+### 2.3 ▶ 피고 주장 (Defendant Arguments)
+{% for arg in narrative.defendant_arguments %}
+- {{ arg }}
+{% endfor %}
+
+---
+
+### 2.4 ▶ 법적 배경 (Legal Context)
+{% for item in narrative.legal_context %}
+- {{ item }}
+{% endfor %}
+
+---
+
+### 2.5 ▶ 법원의 판단 (Court Reasoning)
+{% for item in narrative.court_reasoning %}
+- {{ item }}
+{% endfor %}
+
+---
+
+### 2.6 ▶ 핵심 충돌 포인트 (Core Conflicts)
+{% for item in narrative.core_conflicts %}
+- {{ item }}
+{% endfor %}
+
+---
+
+## 3. ⚖️ Issue Frame (Structured Reasoning)
+
+{% for issue_name, content in issue_frame.issue_groups.items() -%}
+
+---
+
+### 🟥 Issue: **{{ issue_name }}**
+
+> **▷ 원고 주장**
+{%- set p_args = content.get("plaintiff_arguments", []) -%}
+{% if p_args -%}
+{% for arg in p_args -%}
+> - {{ arg }}
+{%- endfor %}
+{% else -%}
+> _원고 주장 기재 없음_
+{%- endif %}
+
+---
+
+> **▷ 피고 주장**
+{%- set d_args = content.get("defendant_arguments", []) -%}
+{% if d_args -%}
+{% for arg in d_args -%}
+> - {{ arg }}
+{%- endfor %}
+{% else -%}
+> _피고 주장 기재 없음_
+{%- endif %}
+
+---
+
+> **▷ 관련 법령·법리**
+{%- set laws = content.get("legal_context", []) -%}
+{% if laws -%}
+{% for law in laws -%}
+> - {{ law }}
+{%- endfor %}
+{% else -%}
+> _관련 법령 기재 없음_
+{%- endif %}
+
+---
+
+> **▷ 법원의 판단**
+{%- set reasoning = content.get("court_reasoning", []) -%}
+{% if reasoning -%}
+{% for r in reasoning -%}
+> - {{ r }}
+{%- endfor %}
+{% else -%}
+> _법원의 판단 기재 없음_
+{%- endif %}
+
+{% endfor %}
+
+---
+
+## 4. 📚 Statutes (Referenced Laws)
+
+{% for s in statutes %}
+### • {{ s.title }}
+{{ s.citation }}
+
+{% endfor %}

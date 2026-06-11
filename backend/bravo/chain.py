@@ -1,6 +1,6 @@
 # bravo/chain_bravo.py
 
-from langchain_openai import ChatOpenAI
+from utils.llm import get_llm, DEFAULT_MODEL
 from langchain_core.prompts import ChatPromptTemplate,PromptTemplate
 from bravo.models_bravo import (BravoKeywordInput,BravoKeywordOutput,BravoIssueCitationInput,
                                 BravoIssueCitationOutput,CitationItem,CitationSource,
@@ -8,6 +8,7 @@ from bravo.models_bravo import (BravoKeywordInput,BravoKeywordOutput,BravoIssueC
                                 BravoSignatureInput,BravoSignatureOutput,
                                 BravoGlobalOutline,BravoIssueOutput,BravoNarrativeOutput)
 from langchain_core.output_parsers import PydanticOutputParser
+from utils.parsers import CleanJsonParser
 from bravo.prompts import (GLOBAL_SUMMARY_TMPL,CLUSTER,
                            PASS_ZERO, NARRATIVE,KEYWORD,CITATION)
 
@@ -16,9 +17,9 @@ from typing import List, Optional, Dict
 
 #pass2-Citation
 class BravoIssueCitationChain:
-    def __init__(self, model: str = "gpt-5.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0, timeout=60)
-        self.parser = PydanticOutputParser(pydantic_object=BravoIssueCitationOutput)
+    def __init__(self, model: str = DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0, timeout=60)
+        self.parser = CleanJsonParser(pydantic_object=BravoIssueCitationOutput)
 
         self.prompt = PromptTemplate(
             template=CITATION,
@@ -38,9 +39,9 @@ class BravoIssueCitationChain:
   
 #pass1   
 class BravoGlobalChain:
-    def __init__(self, model: str = "gpt-5.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0, timeout=60)
-        self.parser = PydanticOutputParser(pydantic_object=BravoGlobalOutline)
+    def __init__(self, model: str = DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0, timeout=60)
+        self.parser = CleanJsonParser(pydantic_object=BravoGlobalOutline)
 
         self.prompt = PromptTemplate(
             template=GLOBAL_SUMMARY_TMPL,
@@ -59,9 +60,9 @@ class BravoGlobalChain:
 
 #pass0
 class ReasoningIssueChain:
-    def __init__(self, model: str = "gpt-5.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0, timeout=60)
-        self.parser = PydanticOutputParser(pydantic_object=BravoIssueOutput)
+    def __init__(self, model: str = DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0, timeout=60)
+        self.parser = CleanJsonParser(pydantic_object=BravoIssueOutput)
 
         self.prompt = PromptTemplate(
             template=PASS_ZERO,
@@ -78,14 +79,14 @@ class ReasoningIssueChain:
         })
 
 #pass_base_b-1
-from langchain_openai import ChatOpenAI
+from utils.llm import get_llm
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 
 class BravoSignatureChain:
-    def __init__(self, model: str = "gpt-4.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0, timeout=60)
-        self.parser = PydanticOutputParser(pydantic_object=BravoSignatureOutput)
+    def __init__(self, model: str = DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0, timeout=60)
+        self.parser = CleanJsonParser(pydantic_object=BravoSignatureOutput)
 
         self.prompt = PromptTemplate(
             template=CLUSTER,
@@ -107,9 +108,9 @@ class BravoSignatureChain:
 
 #pass_base_b
 class BravoKeywordChain:
-    def __init__(self, model="gpt-5.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0, timeout=60)
-        self.parser = PydanticOutputParser(pydantic_object=BravoKeywordOutput)
+    def __init__(self, model=DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0, timeout=60)
+        self.parser = CleanJsonParser(pydantic_object=BravoKeywordOutput)
 
         self.prompt = PromptTemplate(
             template=KEYWORD,
@@ -126,9 +127,9 @@ class BravoKeywordChain:
 
 #pass_base_a
 class BravoNarrativeChain:
-    def __init__(self, model="gpt-4.1"):
-        self.llm = ChatOpenAI(model=model, temperature=0, timeout=60)
-        self.parser = PydanticOutputParser(pydantic_object=BravoNarrativeOutput)
+    def __init__(self, model=DEFAULT_MODEL):
+        self.llm = get_llm(model=model, temperature=0, timeout=60)
+        self.parser = CleanJsonParser(pydantic_object=BravoNarrativeOutput)
 
         self.prompt = PromptTemplate(
             template=NARRATIVE,

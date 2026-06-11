@@ -1,3 +1,4 @@
+from utils.llm import DEFAULT_MODEL
 #export/full_report.py
 from export.export_a import build_export_A
 from export.export_b import build_export_B
@@ -10,7 +11,7 @@ from export.export_docx import export_A_to_docx,export_B_to_docx,export_C_to_doc
 # export A/B/C pipeline
 #=======================
 
-def run_export_pipeline_A(case_id: str, model: str = "gpt-5.1"):
+def run_export_pipeline_A(case_id: str, model: str = DEFAULT_MODEL):
     build_export_A(case_id)
 
     chain = ExportAChain(model=model)
@@ -29,7 +30,7 @@ def run_export_pipeline_A(case_id: str, model: str = "gpt-5.1"):
         "docx": docx_path
     }
 
-def run_export_pipeline_B(case_id: str, model: str = "gpt-5.1"):
+def run_export_pipeline_B(case_id: str, model: str = DEFAULT_MODEL):
     # 1) raw export build
     build_export_B(case_id)
 
@@ -52,7 +53,7 @@ def run_export_pipeline_B(case_id: str, model: str = "gpt-5.1"):
 
 
 
-def run_export_pipeline_C(case_id: str, model: str = "gpt-5.1"):
+def run_export_pipeline_C(case_id: str, model: str = DEFAULT_MODEL):
     # 1) build raw export structure
     build_export_C(case_id)
 
