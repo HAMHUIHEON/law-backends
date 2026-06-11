@@ -1,13 +1,13 @@
 # agents/multi_agent.py
 """
-SupervisorAgent — 판례 검색 + ITCL 법령 분석을 결합한 멀티 에이전트
+SupervisorAgent — 판례 검색 + 세법 조문 + 판례 DB 통합 멀티 에이전트
 
 구조 (LangGraph):
   START
-    └─▶ supervisor  ─ 도구 선택 (search_cases / search_itcl_law /
+    └─▶ supervisor  ─ 도구 선택 (search_cases / search_law /
                                   search_taxlaw_prec / search_taxtr / finish)
           ├─▶ case_search_node      ─ LegalGraphSearch (Neo4j 벡터 + 패턴)
-          ├─▶ law_search_node       ─ ITCLSearch (SemanticIssue 벡터 + 조문)
+          ├─▶ law_search_node       ─ Chroma law_articles (14개 세법 6,687조문)
           ├─▶ taxlaw_prec_node      ─ Chroma taxlaw_prec (NTS 법원 판례 32K)
           ├─▶ taxtr_node            ─ Chroma taxtr_cases (조세심판원 2,463건)
           └─▶ synthesizer           ─ 모든 결과를 합쳐 보고서 작성
@@ -25,7 +25,6 @@ from langgraph.graph import END, StateGraph
 from operator import add as list_add
 
 from db.graph_search import LegalGraphSearch
-from db.itcl_search import ITCLSearch
 
 _llm = None
 
@@ -76,12 +75,10 @@ class MultiAgentState(TypedDict):
     done_tools: Annotated[List[str], list_add]
     iteration: int
 
-    # 도구 결과 — Neo4j + ITCL
+    # 도구 결과
     case_results: Optional[list]
     pattern_results: Optional[dict]
-    law_issues: Optional[list]
-    law_articles: Optional[list]
-    law_structure: Optional[dict]
+    law_articles: Optional[list]   # Chroma law_articles (14개 세법 조문)
 
     # 도구 결과 — Chroma
     taxlaw_prec_results: Optional[list]
@@ -103,24 +100,24 @@ def supervisor_node(state: MultiAgentState) -> dict:
         f"질문: {state['query']}\n\n"
         "사용 가능한 도구:\n"
         "  - search_cases: Neo4j 국제조세 판례 DB 벡터 검색 + 승소 패턴 분석\n"
-        "  - search_itcl_law: 국제조세조정법 조문 구조 + 쟁점 검색\n"
+        "  - search_law: 세법 조문 검색 (14개 세법 법+령+규칙 6,687조문, Chroma)\n"
         "  - search_taxlaw_prec: NTS taxlaw 법원 판례 32,628건 (국승/국패 분류)\n"
         "  - search_taxtr: 조세심판원 재결례 2,463건\n\n"
         "반환 형식 (JSON만, 다른 텍스트 없음):\n"
-        '{"tools": ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_itcl_law"]}\n\n'
+        '{"tools": ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_law"]}\n\n'
         "규칙:\n"
         "- 판례·법원 결정·국승/국패 관련 → search_cases + search_taxlaw_prec 포함\n"
         "- 조세심판·재결례·이의신청 관련 → search_taxtr 포함\n"
-        "- 조문·법령·규정 해석 관련 → search_itcl_law 포함\n"
+        "- 조문·법령·규정 해석 관련 → search_law 포함\n"
         "- 일반 전략·쟁점 분석 → 4개 모두 포함\n"
         "- 최소 2개 이상 선택"
     )
     resp = _get_llm().invoke([HumanMessage(content=prompt)])
     try:
         plan_data = json.loads(resp.content.strip())
-        tools = plan_data.get("tools") or ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_itcl_law"]
+        tools = plan_data.get("tools") or ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_law"]
     except Exception:
-        tools = ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_itcl_law"]
+        tools = ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_law"]
 
     return {"plan": tools, "iteration": 1}
 
@@ -128,9 +125,9 @@ def supervisor_node(state: MultiAgentState) -> dict:
 def _route_supervisor(state: MultiAgentState) -> str:
     done = set(state.get("done_tools") or [])
     plan = state.get("plan") or []
-    for tool in plan:
-        if tool not in done:
-            return tool
+    for t in plan:
+        if t not in done:
+            return t
     return "synthesizer"
 
 
@@ -150,19 +147,13 @@ def case_search_node(state: MultiAgentState) -> dict:
     }
 
 
-# ── 3. ITCL Law Search ────────────────────────────────────────────────────────
+# ── 3. Law Articles Search (Chroma, 14개 세법) ────────────────────────────────
 
 def law_search_node(state: MultiAgentState) -> dict:
-    s = ITCLSearch()
-    try:
-        issues = s.search_similar_issues(state["query"], top_k=6)
-        articles = s.search_articles_by_topic(state["query"], top_k=5)
-    finally:
-        s.close()
+    results = _chroma_search("law_articles", state["query"], n=8)
     return {
-        "law_issues": issues,
-        "law_articles": articles,
-        "done_tools": ["search_itcl_law"],
+        "law_articles": results,
+        "done_tools": ["search_law"],
     }
 
 
@@ -191,13 +182,14 @@ def taxtr_node(state: MultiAgentState) -> dict:
 def synthesizer_node(state: MultiAgentState) -> dict:
     case_block = _fmt_cases(state.get("case_results") or [])
     pattern_block = _fmt_pattern(state.get("pattern_results") or {})
-    law_block = _fmt_law_issues(state.get("law_issues") or [])
-    article_block = _fmt_articles(state.get("law_articles") or [])
+    law_block = _fmt_law_articles(state.get("law_articles") or [])
     prec_block = _fmt_chroma_prec(state.get("taxlaw_prec_results") or [])
     taxtr_block = _fmt_chroma_taxtr(state.get("taxtr_results") or [])
 
+    has_law = bool(state.get("law_articles"))
     has_prec = bool(state.get("taxlaw_prec_results"))
     has_taxtr = bool(state.get("taxtr_results"))
+    law_section = f"\n[세법 조문 검색 결과 (14개 세법)]\n{law_block}\n" if has_law else ""
     prec_section = f"\n[NTS 법원 판례 (taxlaw) 검색 결과]\n{prec_block}\n" if has_prec else ""
     taxtr_section = f"\n[조세심판원 재결례 검색 결과]\n{taxtr_block}\n" if has_taxtr else ""
 
@@ -207,10 +199,9 @@ def synthesizer_node(state: MultiAgentState) -> dict:
         f"[분석 요청]\n{state['query']}\n\n"
         f"[Neo4j 판례 검색 결과]\n{case_block}\n\n"
         f"[승소/패소 패턴]\n{pattern_block}\n"
+        f"{law_section}"
         f"{prec_section}"
         f"{taxtr_section}"
-        f"[ITCL 관련 쟁점 (법령 레이어)]\n{law_block}\n\n"
-        f"[인용 조문]\n{article_block}\n\n"
         "[보고서 구성 — 반드시 아래 순서]\n"
         "1. 핵심 요약 (2~3문장): 판례·재결례 흐름과 법령 구조를 한 번에 정리\n"
         "2. 관련 법령 조문 (2~4 bullet): 인용된 조문 번호·제목·적용 맥락\n"
@@ -266,35 +257,26 @@ def _fmt_pattern(pattern: dict) -> str:
     )
 
 
-def _fmt_law_issues(issues: list) -> str:
-    if not issues:
-        return "(ITCL 쟁점 없음)"
-    lines = []
-    for i in issues[:5]:
-        sim = i.get("similarity", 0)
-        lines.append(
-            f"• [{i.get('issue_id', '')}] {i.get('issue_title', '')} "
-            f"(유사도 {sim:.0%})\n  {str(i.get('issue_summary', ''))[:80]}"
-        )
-    return "\n".join(lines)
-
-
-def _fmt_articles(articles: list) -> str:
-    if not articles:
-        return "(관련 조문 없음)"
+def _fmt_law_articles(articles: list) -> str:
+    """Chroma law_articles 형식 포맷."""
+    if not articles or (len(articles) == 1 and "error" in articles[0]):
+        err = articles[0].get("error", "") if articles else ""
+        return f"(법령 검색 불가: {err})" if err else "(관련 조문 없음)"
     lines = []
     for a in articles[:8]:
-        art_id = a.get("article_id", "")
-        title = a.get("article_title") or ""
+        law_name = a.get("law_name", "")
         scope = a.get("scope", "")
-        related = a.get("related_issue", "")
-        if art_id.startswith("ART_"):
-            num = art_id[4:].replace("_", "의")
-            display = f"제{num}조"
-        else:
-            display = art_id
-        lines.append(f"• {scope} {display} {title}  ← {related}")
-    return "\n".join(lines)
+        art_no = a.get("article_no", "")
+        title = a.get("title", "")
+        domain = a.get("domain", "")
+        doc = a.get("document", "")[:120]
+        scope_label = {"LAW": "법", "DECREE": "시행령", "RULE": "시행규칙"}.get(scope, scope)
+        lines.append(
+            f"• {law_name} {scope_label} 제{art_no}조 {title}"
+            + (f" [{domain}]" if domain else "")
+            + f"\n  {doc}"
+        )
+    return "\n".join(lines) or "(없음)"
 
 
 def _fmt_chroma_prec(items: list) -> str:
@@ -330,7 +312,7 @@ def _build_graph():
     g = StateGraph(MultiAgentState)
     g.add_node("supervisor", supervisor_node)
     g.add_node("search_cases", case_search_node)
-    g.add_node("search_itcl_law", law_search_node)
+    g.add_node("search_law", law_search_node)
     g.add_node("search_taxlaw_prec", taxlaw_prec_node)
     g.add_node("search_taxtr", taxtr_node)
     g.add_node("synthesizer", synthesizer_node)
@@ -341,14 +323,14 @@ def _build_graph():
         _route_supervisor,
         {
             "search_cases": "search_cases",
-            "search_itcl_law": "search_itcl_law",
+            "search_law": "search_law",
             "search_taxlaw_prec": "search_taxlaw_prec",
             "search_taxtr": "search_taxtr",
             "synthesizer": "synthesizer",
         },
     )
     g.add_edge("search_cases", "supervisor")
-    g.add_edge("search_itcl_law", "supervisor")
+    g.add_edge("search_law", "supervisor")
     g.add_edge("search_taxlaw_prec", "supervisor")
     g.add_edge("search_taxtr", "supervisor")
     g.add_edge("synthesizer", END)
@@ -383,9 +365,7 @@ class SupervisorAgent:
             "iteration": 0,
             "case_results": None,
             "pattern_results": None,
-            "law_issues": None,
             "law_articles": None,
-            "law_structure": None,
             "taxlaw_prec_results": None,
             "taxtr_results": None,
             "final_report": None,
@@ -401,9 +381,6 @@ class SupervisorAgent:
             },
             "taxlaw_prec_context": final.get("taxlaw_prec_results") or [],
             "taxtr_context": final.get("taxtr_results") or [],
-            "law_context": {
-                "related_issues": final.get("law_issues") or [],
-                "articles": final.get("law_articles") or [],
-            },
+            "law_articles_context": final.get("law_articles") or [],
             "tools_used": final.get("done_tools") or [],
         }
