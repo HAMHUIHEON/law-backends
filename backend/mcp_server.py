@@ -346,27 +346,33 @@ def _get_supervisor_agent():
 @mcp.tool()
 def run_supervisor_agent(query: str) -> str:
     """
-    SupervisorAgent: 판례 DB와 ITCL 국제조세조정법 조문을 동시에 탐색해
-    교차 분석 보고서를 생성합니다. 국제조세·이전가격 관련 질의에 특히 유용합니다.
+    SupervisorAgent: 판례 DB + 14개 세법 조문(6,687건) + NTS 법원 판례(32,628건)
+    + 조세심판 재결례(2,463건)를 동시에 탐색해 통합 보고서를 생성합니다.
 
     Args:
         query: 분석할 질문 (예: "이전가격 정상가격 산출 방법별 판례 비교")
 
     Returns:
-        통합 보고서 — 판례 컨텍스트 + 법령 조문 근거 + 전략 분석
+        통합 보고서 — 판례 컨텍스트 + 법령 조문 근거 + 재결례 + 전략 분석
     """
     try:
         agent = _get_supervisor_agent()
         result = agent.run(query=query)
         report = result.get("final_report", "")
         case_ctx = result.get("case_context")
-        law_ctx = result.get("law_context")
+        law_ctx = result.get("law_articles_context")
+        prec_ctx = result.get("taxlaw_prec_context")
+        taxtr_ctx = result.get("taxtr_context")
 
         output_parts = [report]
         if case_ctx:
             output_parts.append(f"\n---\n판례 컨텍스트:\n{json.dumps(case_ctx, ensure_ascii=False, indent=2)}")
         if law_ctx:
-            output_parts.append(f"\n---\n법령 컨텍스트:\n{json.dumps(law_ctx, ensure_ascii=False, indent=2)}")
+            output_parts.append(f"\n---\n법령 조문:\n{json.dumps(law_ctx, ensure_ascii=False, indent=2)}")
+        if prec_ctx:
+            output_parts.append(f"\n---\nNTS 법원 판례:\n{json.dumps(prec_ctx, ensure_ascii=False, indent=2)}")
+        if taxtr_ctx:
+            output_parts.append(f"\n---\n조세심판 재결례:\n{json.dumps(taxtr_ctx, ensure_ascii=False, indent=2)}")
 
         return "\n".join(output_parts)
     except Exception as e:
@@ -597,6 +603,74 @@ def run_risk_agent(statute_name: str, revision_summary: str, effective_date: str
             effective_date=effective_date,
         )
         return result.get("final_report", "보고서 생성에 실패했습니다.")
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+# ────────────────────────────────────────────────────────────────
+# Tool 16: TaxlawPrecAgent — NTS 법원 판례 검색 (32,628건)
+# ────────────────────────────────────────────────────────────────
+
+_taxlaw_prec_agent = None
+
+def _get_taxlaw_prec_agent():
+    global _taxlaw_prec_agent
+    if _taxlaw_prec_agent is None:
+        from agents.taxlaw_prec_agent import TaxlawPrecAgent
+        _taxlaw_prec_agent = TaxlawPrecAgent()
+    return _taxlaw_prec_agent
+
+
+@mcp.tool()
+def run_taxlaw_prec_agent(question: str) -> str:
+    """
+    NTS 법원 판례 에이전트: 국세청 taxlaw.nts.go.kr에서 수집한 법원 판례
+    32,628건을 벡터 검색으로 분석합니다. 국승/국패 패턴 파악에 유용합니다.
+
+    Args:
+        question: 분석할 질문 (예: "이전가격 정상가격 산정 관련 국패 판례 패턴은?")
+
+    Returns:
+        GPT 분석 보고서 — 유사 판례 요약, 국승/국패 패턴, 시사점
+    """
+    try:
+        agent = _get_taxlaw_prec_agent()
+        result = agent.ask(question)
+        return result
+    except Exception as e:
+        return json.dumps({"error": str(e)}, ensure_ascii=False)
+
+
+# ────────────────────────────────────────────────────────────────
+# Tool 17: TaxtrAgent — 조세심판 재결례 검색 (2,463건)
+# ────────────────────────────────────────────────────────────────
+
+_taxtr_agent = None
+
+def _get_taxtr_agent():
+    global _taxtr_agent
+    if _taxtr_agent is None:
+        from agents.taxtr_agent import TaxtrAgent
+        _taxtr_agent = TaxtrAgent()
+    return _taxtr_agent
+
+
+@mcp.tool()
+def run_taxtr_agent(question: str) -> str:
+    """
+    조세심판 재결례 에이전트: 조세심판원 재결례 2,463건을 벡터 검색으로 분석합니다.
+    이의신청·심판청구 전략 수립 시 참고 재결례를 빠르게 파악할 수 있습니다.
+
+    Args:
+        question: 분석할 질문 (예: "부당행위계산부인 인용 재결례 특징은?")
+
+    Returns:
+        GPT 분석 보고서 — 유사 재결례 요약, 인용/기각 패턴, 시사점
+    """
+    try:
+        agent = _get_taxtr_agent()
+        result = agent.ask(question)
+        return result
     except Exception as e:
         return json.dumps({"error": str(e)}, ensure_ascii=False)
 
