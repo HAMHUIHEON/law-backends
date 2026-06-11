@@ -5,14 +5,21 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-NEO4J_URI = os.environ["NEO4J_URI"]              # neo4j+s://xxxx.databases.neo4j.io
-NEO4J_USERNAME = os.environ["NEO4J_USERNAME"]    # 보통 "neo4j"
-NEO4J_PASSWORD = os.environ["NEO4J_PASSWORD"]
+NEO4J_URI = os.getenv("NEO4J_URI", "")
+NEO4J_USERNAME = os.getenv("NEO4J_USERNAME", "neo4j")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
 
-driver = GraphDatabase.driver(
-    NEO4J_URI,
-    auth=(NEO4J_USERNAME, NEO4J_PASSWORD),
-)
+_driver = None
+
+def get_driver():
+    global _driver
+    if _driver is None:
+        if not NEO4J_URI:
+            raise RuntimeError("NEO4J_URI is not configured")
+        _driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USERNAME, NEO4J_PASSWORD))
+    return _driver
+
+driver = None  # backward-compat alias — call get_driver() for actual use
 
 if __name__ == "__main__":
     with driver.session() as session:

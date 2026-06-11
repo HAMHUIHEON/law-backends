@@ -7,7 +7,7 @@ import json
 import re
 from datetime import datetime
 from utils_B.normalize import normalize_article_input, to_article_id
-from db.neo4j_client import driver
+from db.neo4j_client import get_driver
 
 router = APIRouter()
 Scope = Literal["LAW", "DECREE", "RULE"]
@@ -46,7 +46,7 @@ def get_snapshot_by_date(as_of: str | None = None):
     LIMIT 1
     """
 
-    with driver.session() as session:
+    with get_driver().session() as session:
         r = session.run(query, as_of=as_of).single()
 
     if not r:
@@ -73,7 +73,7 @@ def list_law_snapshots():
     ORDER BY s.effective_at DESC
     """
 
-    with driver.session() as session:
+    with get_driver().session() as session:
         result = session.run(query)
         snapshots = []
         for r in result:
@@ -136,7 +136,7 @@ def get_chapter_graph(chapter_id: str, set_key: str):
     nodes = {}
     edges = []
 
-    with driver.session() as session:
+    with get_driver().session() as session:
         for r in session.run(query, set_key=set_key, chapter_id=chapter_id):
             ic = r["ic"]
             ri = r["ri"]
@@ -263,7 +263,7 @@ def get_structure(chapter_id: str, set_key: str):
             "id": eid,
         })
 
-    with driver.session() as session:
+    with get_driver().session() as session:
         for r in session.run(query, set_key=set_key, chapter_id=chapter_id):
             ic  = r["ic"]
             c   = r["c"]
@@ -361,7 +361,7 @@ def get_chapters(set_key: str):
     """
     chapters = []
 
-    with driver.session() as session:
+    with get_driver().session() as session:
         for r in session.run(query, set_key=set_key):
             chapters.append({
             "chapter_id": r["chapter_id"],
@@ -589,7 +589,7 @@ def reverse_lookup_article_full(
       toInteger(rs.step_id)
     """
 
-    with driver.session() as session:
+    with get_driver().session() as session:
         rows = session.run(
             query,
             article_id=article_id,
@@ -643,7 +643,7 @@ def get_scope_versions_from_snapshot(set_key: str) -> List[Dict[str, str]]:
       v.version_key AS version_key
     ORDER BY scope
     """
-    with driver.session() as session:
+    with get_driver().session() as session:
         rows = session.run(query, set_key=set_key).data()
 
     out: List[Dict[str, str]] = []

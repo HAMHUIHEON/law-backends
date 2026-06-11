@@ -16,11 +16,21 @@ from openai import OpenAI
 
 load_dotenv()
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY가 설정되어 있지 않습니다.")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+_client = None
+
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        key = OPENAI_API_KEY or os.getenv("OPENAI_API_KEY", "")
+        if not key:
+            raise RuntimeError("OPENAI_API_KEY가 설정되어 있지 않습니다.")
+        _client = OpenAI(api_key=key)
+    return _client
+
+# backward compat alias
+client = None  # use _get_client() for actual use
 
 MODEL = "text-embedding-3-small"
 
@@ -45,7 +55,7 @@ def embed(text: str) -> np.ndarray:
     if not text:
         raise ValueError("임베딩할 텍스트가 비어 있습니다.")
 
-    res = client.embeddings.create(
+    res = _get_client().embeddings.create(
         model=MODEL,
         input=text,
     )
