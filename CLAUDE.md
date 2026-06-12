@@ -236,12 +236,24 @@ CLERK_ISSUER=https://...clerk.accounts.dev
 
 ---
 
+## 완료 현황 (2026-06-12)
+
+| 항목 | 상태 | 내용 |
+|------|------|------|
+| Railway 502 근본 해결 | ✅ | `agents/__init__.py` 비움 (cascade import 제거) |
+| 5개 에이전트 로컬 테스트 | ✅ | 전부 정상 (아래 테스트 결과 참조) |
+| 프론트엔드 UI 추가 | ✅ | 9종 에이전트 — Vercel `a3c0c60` 배포 |
+| chroma_search 임베딩 버그 수정 | ✅ | text-embedding-3-small EF 명시 (`e4e571ef`) |
+
+## Chroma 검색 중요 주의사항
+
+`db/chroma_search.py`의 모든 `get_collection` 호출에 `embedding_function=_get_ef()` 필수.  
+Chroma 기본(ONNX 384-dim) ≠ 빌드 시 사용한 OpenAI text-embedding-3-small(1536-dim) → 쿼리 전부 예외 발생.
+
 ## 다음 세션 시작 항목
 
-1. **Railway 502 해소** — 대시보드에서 빌드 로그 확인. 계속 실패 시 수동 Redeploy. 최신 push `89809475`
-2. **5개 에이전트 로컬 테스트** — `/api/strategy/strategy`, `/api/trend/ask`, `/api/itcl/ask` 실제 동작 확인
-3. **프론트엔드 에이전트 UI 추가** — strategy/rebuttal/trend/itcl/risk 5종 agent/page.tsx에 추가
-4. **`mcp_server.py` 업데이트** — 신규 에이전트 5종 툴 추가
-5. **질의회신 벡터 DB** — 다운로드 재실행 후 Chroma 빌드
-6. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
-7. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
+1. **Railway Chroma 없음 해결** — 프로덕션에서 Strategy/Rebuttal/Trend/Risk 에이전트가 500 반환. 옵션: Chroma Cloud, Pinecone, Supabase pgvector 마이그레이션
+2. **`mcp_server.py` 업데이트** — 신규 에이전트 5종 툴 추가
+3. **질의회신 벡터 DB** — 다운로드 재실행 후 Chroma 빌드
+4. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
+5. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
