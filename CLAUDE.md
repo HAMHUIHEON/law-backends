@@ -121,16 +121,21 @@
 
 ---
 
-## 에이전트 구성 (2026-06-11 기준)
+## 에이전트 구성 (2026-06-12 기준)
 
 상세 내용은 `AGENTS.md` 참조.
 
 | 에이전트 | 파일 | 엔드포인트 | 데이터 소스 |
 |---------|------|-----------|------------|
 | SupervisorAgent (MULTI) | `agents/multi_agent.py` | `POST /api/agent/multi` | Neo4j + Chroma 3종 |
-| InsightAgent (INSIGHT) | `agents/insight_agent.py` | `POST /api/agent/insight` | Neo4j LegalGraphSearch |
+| InsightAgent (INSIGHT) | `agents/insight_agent.py` | `POST /api/agent/insight` | Neo4j + Chroma law_articles |
 | TaxlawPrecAgent | `agents/taxlaw_prec_agent.py` | `POST /api/prec/ask` | Chroma `taxlaw_prec` |
 | TaxtrAgent | `agents/taxtr_agent.py` | `POST /api/taxtr/ask` | Chroma `taxtr_cases` |
+| StrategyAgent | `agents/strategy_agent.py` | `POST /api/strategy/strategy` | Chroma 3종 |
+| RebuttalAgent | `agents/rebuttal_agent.py` | `POST /api/strategy/rebuttal` | Chroma 2종 (승소 필터) |
+| TrendAgent | `agents/trend_agent.py` | `POST /api/trend/ask` | Chroma taxlaw_prec 연도집계 |
+| ITCLAgent | `agents/itcl_agent.py` | `POST /api/itcl/ask` | Chroma 2종 + Neo4j ITCLSearch |
+| RiskAgent | `agents/risk_agent.py` | `POST /api/strategy/risk` | Chroma 3종 |
 
 **MULTI 에이전트 검색 소스 (4개)**:
 1. `search_cases` — Neo4j 벡터 검색 (국제조세 판례)
@@ -233,8 +238,10 @@ CLERK_ISSUER=https://...clerk.accounts.dev
 
 ## 다음 세션 시작 항목
 
-1. **Railway 502 해소 확인** — 최근 push(chromadb==0.6.3 + railway.toml + CLERK graceful) 후 `/health` 응답 확인
-2. **질의회신 벡터 DB** — `cases/inquiry/` 다운로드 재실행 후 Chroma 빌드
-3. **INSIGHT 에이전트 법령 소스** — `insight_agent.py` executor에서 ITCLSearch 법령 조회 부분 → Chroma `law_articles`로 교체 고려
-4. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
-5. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
+1. **Railway 502 해소** — 대시보드에서 빌드 로그 확인. 계속 실패 시 수동 Redeploy. 최신 push `89809475`
+2. **5개 에이전트 로컬 테스트** — `/api/strategy/strategy`, `/api/trend/ask`, `/api/itcl/ask` 실제 동작 확인
+3. **프론트엔드 에이전트 UI 추가** — strategy/rebuttal/trend/itcl/risk 5종 agent/page.tsx에 추가
+4. **`mcp_server.py` 업데이트** — 신규 에이전트 5종 툴 추가
+5. **질의회신 벡터 DB** — 다운로드 재실행 후 Chroma 빌드
+6. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
+7. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
