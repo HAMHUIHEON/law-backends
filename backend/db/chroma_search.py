@@ -1,10 +1,13 @@
 # db/chroma_search.py — 공유 Chroma 검색 유틸리티
 # taxlaw_prec (32,628 법원 판례) / taxtr_cases (2,463 조세심판) / law_articles (6,687 조문)
+# DB는 text-embedding-3-small (1536차원)으로 빌드됨 → 쿼리도 동일 모델 사용 필수
 
+import os
 from pathlib import Path
 
 _CHROMA_DIR = Path(__file__).parent.parent.parent / "vector_db" / "chroma"
 _client = None
+_ef = None
 
 
 def _get_client():
@@ -13,6 +16,17 @@ def _get_client():
         import chromadb
         _client = chromadb.PersistentClient(path=str(_CHROMA_DIR))
     return _client
+
+
+def _get_ef():
+    global _ef
+    if _ef is None:
+        from chromadb.utils import embedding_functions
+        _ef = embedding_functions.OpenAIEmbeddingFunction(
+            api_key=os.environ.get("OPENAI_API_KEY", ""),
+            model_name="text-embedding-3-small",
+        )
+    return _ef
 
 
 def search_taxlaw_prec(
@@ -25,7 +39,7 @@ def search_taxlaw_prec(
     filter_winning=True 시 취소/인용/승소 결론 판례만 반환.
     """
     try:
-        col = _get_client().get_collection("taxlaw_prec")
+        col = _get_client().get_collection("taxlaw_prec", embedding_function=_get_ef())
         results = col.query(
             query_texts=[query],
             n_results=min(n * 3 if filter_winning else n, 50),
@@ -55,7 +69,7 @@ def search_taxtr_cases(
     filter_favorable=True 시 인용/취소/감액 재결만 반환.
     """
     try:
-        col = _get_client().get_collection("taxtr_cases")
+        col = _get_client().get_collection("taxtr_cases", embedding_function=_get_ef())
         results = col.query(
             query_texts=[query],
             n_results=min(n * 3 if filter_favorable else n, 50),
@@ -78,7 +92,7 @@ def search_taxtr_cases(
 def search_law_articles(query: str, n: int = 6) -> list:
     """세법 조문(6,687건) 벡터 검색."""
     try:
-        col = _get_client().get_collection("law_articles")
+        col = _get_client().get_collection("law_articles", embedding_function=_get_ef())
         results = col.query(
             query_texts=[query],
             n_results=n,
@@ -95,7 +109,7 @@ def search_law_articles(query: str, n: int = 6) -> list:
 def get_taxlaw_prec_stats(query: str, n: int = 50) -> dict:
     """연도별 판례 승소율 통계 (TrendAgent용)."""
     try:
-        col = _get_client().get_collection("taxlaw_prec")
+        col = _get_client().get_collection("taxlaw_prec", embedding_function=_get_ef())
         results = col.query(
             query_texts=[query],
             n_results=n,
