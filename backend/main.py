@@ -7,7 +7,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")  # 29_FINAL/.env (로컬 개�
 from fastapi import FastAPI, Request
 import requests
 from fastapi.middleware.cors import CORSMiddleware
-from routers import cases, law, agent, risk, taxtr, court, strategy, taxlaw_prec
+from routers import cases, law, agent, risk, taxtr, court, strategy, taxlaw_prec, trend, itcl
 from routers import (publications, publications_a,
                              publications_b, publications_c,
                              publications_d, publications_e, search)
@@ -82,6 +82,8 @@ app.include_router(taxtr.router, prefix="/api/taxtr", tags=["taxtr"])
 app.include_router(court.router, prefix="/api/court", tags=["court"])
 app.include_router(strategy.router, prefix="/api/strategy", tags=["strategy"])
 app.include_router(taxlaw_prec.router, prefix="/api/prec", tags=["prec"])
+app.include_router(trend.router, prefix="/api/trend", tags=["trend"])
+app.include_router(itcl.router, prefix="/api/itcl", tags=["itcl"])
 
 
 @app.get("/health")
