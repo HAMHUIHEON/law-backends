@@ -10,7 +10,7 @@ debug/
 attach_sent/
 load_file/
 engines/
-issue_index/
+/issue_index/
 
 # 환경변수
 .env

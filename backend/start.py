@@ -32,6 +32,7 @@ python = _find_python()
 print(f"[start.py] Python={python}")
 
 subprocess.run([python, "init_chroma.py"], check=False)
+subprocess.run([python, "scripts/add_itcl_to_chroma.py"], check=False)
 
 port = os.environ.get("PORT", "8000")
 print(f"[start.py] uvicorn 시작 PORT={port}")

@@ -1,0 +1,33 @@
+# .railwayignore — railway up 업로드 제어 (이 파일이 있으면 .gitignore 무시됨)
+# issue_index/ 를 포함하기 위해 parent .gitignore 대신 이 파일 사용
+
+# Python build artifacts
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Env / secrets
+.env
+.env.*
+
+# Large data dirs (Railway Volume 또는 재생성 가능)
+vector_db/
+law/
+cases/
+uploads/
+output/
+logs/
+
+# 캐시 데이터 (608개 판례 폴더, Docker 이미지에 불포함)
+# issue_index/ 는 의도적으로 포함 (12MB pkl, /api/search/issues + MULTI cache 검색에 필요)
+cache/
+
+# Dev tools
+.DS_Store
+*.log
+backend_stderr.log
+backend_stdout.log
