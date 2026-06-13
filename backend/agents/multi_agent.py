@@ -29,6 +29,17 @@ from db.chroma_search import (
     search_taxtr_cases as _chroma_taxtr,
 )
 
+# 국제조세/이전가격 관련 키워드 → ITCL 전용 fallback 쿼리 사용
+_ITCL_KEYWORDS = ["이전가격", "국제조세", "정상가격", "이전가", "BEPS", "필라", "pillar",
+                   "CFC", "과세가격", "국조법", "독립기업", "국외특수관계", "조세조약"]
+_ITCL_LAW_QUERY = "국제조세조정법 정상가격 독립기업원칙 국외특수관계인 이전가격 과세표준 경정"
+_ITCL_PREC_QUERY = "법인세 정상가격 국외특수관계법인 이전가격 과세처분 경정 취소"
+
+
+def _is_itcl_query(q: str) -> bool:
+    q_lower = q.lower()
+    return any(kw in q_lower for kw in _ITCL_KEYWORDS)
+
 _llm = None
 
 def _get_llm():
@@ -94,9 +105,11 @@ def supervisor_node(state: MultiAgentState) -> dict:
         "  - 조문·법령 해석 → search_law 포함\n"
         "  - 일반 전략·쟁점 분석 → 4개 모두 포함 (최소 2개)\n\n"
         "쿼리 최적화 규칙:\n"
-        "  - law_query: 원래 쟁점의 핵심 법령명·조문 키워드 (예: 이전가격이면 '국제조세조정법 이전가격 정상가격 독립기업원칙')\n"
-        "  - prec_query: 세목+사실관계 확장 (예: '법인세 이전가격 정상가격 국외특수관계법인 과세처분')\n"
-        "  - taxtr_query: 처분 유형+쟁점 확장 (예: '이전가격 과세처분 조세심판 정상가격')"
+        "  - law_query: 법령명+핵심 법적 개념 조합. 이전가격/국제조세/정상가격 관련이면 반드시\n"
+        "    '국제조세조정법 정상가격 독립기업원칙 국외특수관계인'을 포함할 것.\n"
+        "  - prec_query: 세목+사실관계 확장. 이전가격이면 '법인세 이전가격 정상가격 국외특수관계법인 과세처분'.\n"
+        "  - taxtr_query: 처분 유형+쟁점 확장. 이전가격이면 '이전가격 과세처분 조세심판 정상가격'.\n"
+        "  ※ 쿼리는 한국어 세법 DB 벡터 검색용이므로 최대한 구체적 법적 용어를 사용할 것."
     )
     resp = _get_llm().invoke([HumanMessage(content=prompt)])
     try:
@@ -150,8 +163,19 @@ def case_search_node(state: MultiAgentState) -> dict:
 def law_search_node(state: MultiAgentState) -> dict:
     query = state.get("law_query") or state["query"]
     results = _chroma_law(query, n=8)
+
+    # 이전가격/국제조세 쿼리면 ITCL 전용 fallback 검색으로 보강
+    if _is_itcl_query(state["query"]):
+        itcl_results = _chroma_law(_ITCL_LAW_QUERY, n=6)
+        seen = {(r.get("law_name", ""), r.get("article_no", "")) for r in results}
+        for r in itcl_results:
+            key = (r.get("law_name", ""), r.get("article_no", ""))
+            if key not in seen:
+                results.append(r)
+                seen.add(key)
+
     return {
-        "law_articles": results,
+        "law_articles": results[:10],
         "done_tools": ["search_law"],
     }
 
@@ -161,8 +185,19 @@ def law_search_node(state: MultiAgentState) -> dict:
 def taxlaw_prec_node(state: MultiAgentState) -> dict:
     query = state.get("prec_query") or state["query"]
     results = _chroma_prec(query, n=8)
+
+    # 이전가격/국제조세 쿼리면 ITCL 전용 prec 추가 검색
+    if _is_itcl_query(state["query"]):
+        itcl_results = _chroma_prec(_ITCL_PREC_QUERY, n=5)
+        seen = {r.get("case_no") or r.get("doc_id", "") for r in results}
+        for r in itcl_results:
+            key = r.get("case_no") or r.get("doc_id", "")
+            if key and key not in seen:
+                results.append(r)
+                seen.add(key)
+
     return {
-        "taxlaw_prec_results": results,
+        "taxlaw_prec_results": results[:10],
         "done_tools": ["search_taxlaw_prec"],
     }
 
