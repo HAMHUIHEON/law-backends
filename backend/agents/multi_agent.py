@@ -218,14 +218,34 @@ def taxtr_node(state: MultiAgentState) -> dict:
 def synthesizer_node(state: MultiAgentState) -> dict:
     case_block = _fmt_cases(state.get("case_results") or [])
     pattern_block = _fmt_pattern(state.get("pattern_results") or {})
-    law_block = _fmt_law_articles(state.get("law_articles") or [])
+    law_articles = state.get("law_articles") or []
+    law_block = _fmt_law_articles(law_articles)
     prec_block = _fmt_chroma_prec(state.get("taxlaw_prec_results") or [])
     taxtr_block = _fmt_chroma_taxtr(state.get("taxtr_results") or [])
 
-    has_law = bool(state.get("law_articles"))
+    has_law = bool(law_articles)
     has_prec = bool(state.get("taxlaw_prec_results"))
     has_taxtr = bool(state.get("taxtr_results"))
-    law_section = f"\n[세법 조문 검색 결과 (14개 세법)]\n{law_block}\n" if has_law else ""
+
+    # ITCL 쿼리인데 국조법 조문이 결과에 없으면 경고 주입
+    is_itcl = _is_itcl_query(state["query"])
+    itcl_law_names = {"국제조세조정에 관한 법률", "국조법", "itcl"}
+    has_itcl_law = any(
+        any(n in (a.get("law_name") or "").lower() or n in (a.get("slug") or "")
+            for n in itcl_law_names)
+        for a in law_articles
+    )
+    itcl_missing_warning = ""
+    if is_itcl and not has_itcl_law:
+        itcl_missing_warning = (
+            "\n⚠️ [데이터 부재 경고] 이 질문은 국제조세조정에 관한 법률(국조법) 관련이지만, "
+            "현재 벡터 DB에 국조법 조문이 수록되어 있지 않습니다. "
+            "law_articles 검색 결과에 국조법 조문이 없으므로 조문 항목은 '데이터 미수록'으로 표시해야 합니다.\n"
+        )
+
+    law_section = f"\n[세법 조문 검색 결과]{itcl_missing_warning}\n{law_block}\n" if has_law else (
+        f"\n[세법 조문 검색 결과]{itcl_missing_warning}\n(검색 결과 없음)\n" if itcl_missing_warning else ""
+    )
     prec_section = f"\n[NTS 법원 판례 (taxlaw) 검색 결과]\n{prec_block}\n" if has_prec else ""
     taxtr_section = f"\n[조세심판원 재결례 검색 결과]\n{taxtr_block}\n" if has_taxtr else ""
 
@@ -250,6 +270,7 @@ def synthesizer_node(state: MultiAgentState) -> dict:
         "- 구체적 조문 번호(제X조)와 판례/재결 번호 반드시 명시\n"
         "- 법원 판례(국승/국패)와 심판원 재결례를 구분해서 서술\n"
         "- 관련 없는 판례는 '유사 판례 미발견'으로 명시하고 생략\n"
+        "- 조문 데이터 부재 경고가 있으면 '관련 법령 조문' 항목에 반드시 '국조법 조문 데이터 미수록 — 벡터 DB 재빌드 필요'를 명시\n"
         "- 판결문 문체 금지 → 실무자 보고서 톤"
     )
 

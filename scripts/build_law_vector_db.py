@@ -28,6 +28,7 @@ CHROMA_DIR = ROOT / "vector_db" / "chroma"
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 
 LAWS = [
+    # law/ 폴더에 실제 존재하는 슬러그만 포함
     {"name": "국세기본법",       "slug": "gukse_basic",      "kinds": ["law", "decree"]},
     {"name": "법인세법",         "slug": "corporate_tax",    "kinds": ["law", "decree", "rule"]},
     {"name": "소득세법",         "slug": "income_tax",       "kinds": ["law", "decree", "rule"]},
@@ -35,7 +36,16 @@ LAWS = [
     {"name": "국세징수법",       "slug": "gukse_collection", "kinds": ["law", "decree", "rule"]},
     {"name": "조세범처벌법",     "slug": "tax_crime",        "kinds": ["law"]},
     {"name": "조세범처벌절차법", "slug": "tax_crime_proc",   "kinds": ["law", "decree"]},
+    # ↓ law/itcl/ 폴더 없음 → 빌드 시 스킵됨. 국조법 조문이 Chroma에 없는 근본 원인.
+    # 해결: scripts/build_law_history_db.py로 law/itcl/ 다운로드 후 재빌드 필요.
     {"name": "국제조세조정에 관한 법률", "slug": "itcl",    "kinds": ["law", "decree", "rule"]},
+    # ↓ 아래 법령들도 law/ 폴더 없음. 다운로드 후 추가 가능.
+    # {"name": "상속세 및 증여세법",  "slug": "inheritance_tax",       "kinds": ["law", "decree", "rule"]},
+    # {"name": "관세법",              "slug": "customs",               "kinds": ["law", "decree", "rule"]},
+    # {"name": "자본시장법",          "slug": "capital_market",        "kinds": ["law", "decree"]},
+    # {"name": "개별소비세법",        "slug": "individual_consumption","kinds": ["law", "decree"]},
+    # {"name": "종합부동산세법",      "slug": "comprehensive_realty",  "kinds": ["law", "decree", "rule"]},
+    # {"name": "조세특례제한법",      "slug": "joseteukrejehan",       "kinds": ["law", "decree", "rule"]},
 ]
 
 SCOPE_LABEL = {"LAW": "법", "DECREE": "시행령", "RULE": "시행규칙"}
