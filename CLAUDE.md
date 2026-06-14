@@ -242,7 +242,7 @@ GET http://www.law.go.kr/DRF/lawService.do
 
 ```
 OPENAI_API_KEY=...
-NEO4J_URI=neo4j+s://3dfa7316.databases.neo4j.io
+NEO4J_URI=neo4j+s://a0c49c04.databases.neo4j.io
 NEO4J_USERNAME=...
 NEO4J_PASSWORD=...
 CLERK_ISSUER=https://...clerk.accounts.dev
@@ -272,11 +272,10 @@ Chroma 기본(ONNX 384-dim) ≠ 빌드 시 사용한 OpenAI text-embedding-3-sma
 
 ## 다음 세션 시작 항목
 
-1. **Neo4j URI 업데이트** — Railway Variables → `NEO4J_URI=neo4j+s://a0c49c04.databases.neo4j.io` 변경 후 redeploy
-2. **`mcp_server.py` 업데이트** — strategy/rebuttal/trend/itcl/risk 5개 에이전트 툴 추가
-3. **질의회신 벡터 DB** — `cases/inquiry/` 다운로드 후 Chroma 빌드
-4. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
-5. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
+1. **`mcp_server.py` 업데이트** — strategy/rebuttal/trend/itcl/risk 5개 에이전트 툴 추가
+2. **질의회신 벡터 DB** — `cases/inquiry/` 다운로드 후 Chroma 빌드
+3. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
+4. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
 
 ## issue_index 구조 (캐시 쟁점 벡터 인덱스)
 
