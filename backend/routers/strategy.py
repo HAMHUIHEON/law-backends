@@ -1,5 +1,5 @@
 # routers/strategy.py — 불복전략 + 반론초안 + 법령개정리스크 API
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional
 
@@ -67,7 +67,7 @@ def analyze_strategy(req: CaseRequest):
 
 @router.post("/rebuttal")
 def generate_rebuttal(req: RebuttalRequest):
-    """과세처분 이유서 → 납세자 승소 판례 검색 + 반론 초안."""
+    """과세처분 이유서 텍스트 → 납세자 승소 판례 검색 + 반론 초안."""
     if not req.disposition_text.strip():
         raise HTTPException(status_code=400, detail="disposition_text가 비어 있습니다.")
     try:
@@ -78,6 +78,96 @@ def generate_rebuttal(req: RebuttalRequest):
         "final_report": result.get("final_report"),
         "winning_court_cases": result.get("winning_court_cases"),
         "favorable_taxtr_cases": result.get("favorable_taxtr_cases"),
+        "law_articles": result.get("law_articles"),
+    }
+
+
+@router.post("/rebuttal/upload")
+async def generate_rebuttal_from_file(file: UploadFile = File(...)):
+    """PDF/TXT 과세처분 이유서 업로드 → 텍스트 추출 → 반론 초안."""
+    filename = (file.filename or "").lower()
+    content = await file.read()
+
+    if filename.endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            import io
+            reader = PdfReader(io.BytesIO(content))
+            pages = []
+            for page in reader.pages:
+                t = page.extract_text() or ""
+                if t.strip():
+                    pages.append(t.strip())
+            disposition_text = "\n".join(pages)[:6000]
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"PDF 추출 실패: {e}")
+    elif filename.endswith((".txt", ".md")):
+        try:
+            disposition_text = content.decode("utf-8", errors="replace")[:6000]
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"텍스트 추출 실패: {e}")
+    else:
+        raise HTTPException(status_code=400, detail="PDF 또는 TXT 파일만 지원합니다.")
+
+    if not disposition_text.strip():
+        raise HTTPException(status_code=400, detail="파일에서 텍스트를 추출할 수 없습니다.")
+
+    try:
+        result = _get_rebuttal().run(disposition_text=disposition_text.strip())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"에이전트 오류: {e}")
+
+    return {
+        "source_file": file.filename,
+        "extracted_chars": len(disposition_text),
+        "final_report": result.get("final_report"),
+        "winning_court_cases": result.get("winning_court_cases"),
+        "favorable_taxtr_cases": result.get("favorable_taxtr_cases"),
+        "law_articles": result.get("law_articles"),
+    }
+
+
+@router.post("/strategy/upload")
+async def analyze_strategy_from_file(file: UploadFile = File(...)):
+    """PDF/TXT 사건 서류 업로드 → 텍스트 추출 → 불복전략 보고서."""
+    filename = (file.filename or "").lower()
+    content = await file.read()
+
+    if filename.endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            import io
+            reader = PdfReader(io.BytesIO(content))
+            pages = []
+            for page in reader.pages:
+                t = page.extract_text() or ""
+                if t.strip():
+                    pages.append(t.strip())
+            summary = "\n".join(pages)[:6000]
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"PDF 추출 실패: {e}")
+    elif filename.endswith((".txt", ".md")):
+        try:
+            summary = content.decode("utf-8", errors="replace")[:6000]
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"텍스트 추출 실패: {e}")
+    else:
+        raise HTTPException(status_code=400, detail="PDF 또는 TXT 파일만 지원합니다.")
+
+    if not summary.strip():
+        raise HTTPException(status_code=400, detail="파일에서 텍스트를 추출할 수 없습니다.")
+
+    try:
+        result = _get_strategy().run(client_summary=summary.strip())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"에이전트 오류: {e}")
+
+    return {
+        "source_file": file.filename,
+        "extracted_chars": len(summary),
+        "final_report": result.get("final_report"),
+        "court_cases": result.get("court_cases"),
+        "taxtr_cases": result.get("taxtr_cases"),
         "law_articles": result.get("law_articles"),
     }
 

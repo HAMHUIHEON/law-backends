@@ -10,7 +10,7 @@ from pathlib import Path
 CHROMA_DIR = Path(os.environ.get("CHROMA_DIR", "/app/chroma"))
 CHROMA_URL = os.environ.get("CHROMA_DOWNLOAD_URL", "")
 # 이 버전 번호를 올리면 Railway Volume의 기존 데이터를 삭제하고 재다운로드
-CHROMA_VERSION = "v2"
+CHROMA_VERSION = "v3"
 
 version_file = CHROMA_DIR / ".chroma_version"
 

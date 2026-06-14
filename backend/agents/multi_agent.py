@@ -28,14 +28,17 @@ from db.chroma_search import (
     search_law_articles as _chroma_law,
     search_taxlaw_prec as _chroma_prec,
     search_taxtr_cases as _chroma_taxtr,
+    search_pdf_court_cases as _chroma_pdf,
 )
 from issue_vector_index import load_index as _load_issue_index, search as _idx_search
 
 # 국제조세/이전가격 관련 키워드 → ITCL 전용 fallback 쿼리 사용
 _ITCL_KEYWORDS = ["이전가격", "국제조세", "정상가격", "이전가", "BEPS", "필라", "pillar",
-                   "CFC", "과세가격", "국조법", "독립기업", "국외특수관계", "조세조약"]
-_ITCL_LAW_QUERY = "국제조세조정법 정상가격 독립기업원칙 국외특수관계인 이전가격 과세표준 경정"
-_ITCL_PREC_QUERY = "법인세 정상가격 국외특수관계법인 이전가격 과세처분 경정 취소"
+                   "CFC", "과세가격", "국조법", "독립기업", "국외특수관계", "조세조약",
+                   "정상이자율", "정상임대료", "정상로열티", "비교가능", "정상가액",
+                   "국제거래", "조세피난처", "혼성불일치", "무형자산 이전", "세원잠식"]
+_ITCL_LAW_QUERY = "국제조세조정법 정상가격 독립기업원칙 국외특수관계인 이전가격 이자율 로열티 과세표준 경정"
+_ITCL_PREC_QUERY = "법인세 정상가격 국외특수관계법인 이전가격 정상이자율 로열티 과세처분 경정 취소"
 
 
 def _is_itcl_query(q: str) -> bool:
@@ -82,6 +85,9 @@ class MultiAgentState(TypedDict):
     taxlaw_prec_results: Optional[list]
     taxtr_results: Optional[list]
 
+    # PDF 판례 임베딩 결과 (uploads/ + CASE/ 판결문 전문)
+    pdf_case_results: Optional[list]
+
     # 로컬 캐시 분석 결과 (bravo 분석 완료된 판결문)
     issue_cache_results: Optional[list]
 
@@ -101,28 +107,29 @@ def supervisor_node(state: MultiAgentState) -> dict:
         f"질문: {state['query']}\n\n"
         "반환 형식 (JSON만, 다른 텍스트 없음):\n"
         '{\n'
-        '  "tools": ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_law", "search_issue_cache"],\n'
+        '  "tools": ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_law", "search_issue_cache", "search_pdf_cases"],\n'
         '  "law_query": "세법 조문 검색용 — 법령명·조문·핵심 법적 개념 키워드 중심으로 확장",\n'
         '  "prec_query": "법원 판례 검색용 — 세목·사실관계·핵심 쟁점 키워드 중심으로 확장",\n'
         '  "taxtr_query": "조세심판 재결례 검색용 — 처분유형·세목·쟁점 키워드 중심으로 확장"\n'
         '}\n\n'
         "사용 가능한 도구:\n"
         "  - search_cases: Neo4j 국제조세 판례 DB 벡터 검색 + 승소 패턴 분석\n"
-        "  - search_law: 세법 조문 검색 (14개 세법 법+령+규칙 6,687조문)\n"
+        "  - search_law: 세법 조문 검색 (14개 세법 법+령+규칙 6,687조문, 국조법 포함)\n"
         "  - search_taxlaw_prec: NTS taxlaw 법원 판례 32,628건 (국승/국패 분류)\n"
         "  - search_taxtr: 조세심판원 재결례 2,463건\n"
-        "  - search_issue_cache: bravo 파이프라인 분석 완료 판결문 캐시 (270건 구조화 쟁점·소결론·인용법령)\n\n"
+        "  - search_issue_cache: bravo 분석 완료 판결문 (270건 구조화 쟁점·소결론·인용법령)\n"
+        "  - search_pdf_cases: PDF 원문 판례 전문 임베딩 (이전가격·국제조세 핵심 판결 300+건)\n\n"
         "도구 선택 규칙:\n"
         "  - 판례·법원 결정·국승/국패 → search_cases + search_taxlaw_prec 포함\n"
+        "  - 이전가격·국제조세·정상가격 → search_pdf_cases + search_issue_cache 반드시 포함\n"
         "  - 조세심판·재결례 → search_taxtr 포함\n"
         "  - 조문·법령 해석 → search_law 포함\n"
-        "  - 쟁점 분석·전략·심층 판례 분석 → search_issue_cache 포함\n"
-        "  - 일반 전략·쟁점 분석 → 5개 모두 포함 (최소 2개)\n\n"
+        "  - 종합 분석·전략·쟁점 분석 → 6개 모두 포함\n\n"
         "쿼리 최적화 규칙:\n"
-        "  - law_query: 법령명+핵심 법적 개념 조합. 이전가격/국제조세/정상가격 관련이면 반드시\n"
-        "    '국제조세조정법 정상가격 독립기업원칙 국외특수관계인'을 포함할 것.\n"
-        "  - prec_query: 세목+사실관계 확장. 이전가격이면 '법인세 이전가격 정상가격 국외특수관계법인 과세처분'.\n"
-        "  - taxtr_query: 처분 유형+쟁점 확장. 이전가격이면 '이전가격 과세처분 조세심판 정상가격'.\n"
+        "  - law_query: 법령명+핵심 법적 개념. 이전가격/국제조세/정상가격 관련이면 반드시\n"
+        "    '국제조세조정법 정상가격 독립기업원칙 국외특수관계인 이전가격'을 포함.\n"
+        "  - prec_query: 세목+사실관계. 이전가격이면 '법인세 이전가격 정상가격 국외특수관계법인 과세처분 경정'.\n"
+        "  - taxtr_query: 처분 유형+쟁점. 이전가격이면 '이전가격 과세처분 조세심판 정상가격 경정'.\n"
         "  ※ 쿼리는 한국어 세법 DB 벡터 검색용이므로 최대한 구체적 법적 용어를 사용할 것."
     )
     resp = _get_llm().invoke([HumanMessage(content=prompt)])
@@ -130,12 +137,18 @@ def supervisor_node(state: MultiAgentState) -> dict:
         content = resp.content.strip()
         json_match = re.search(r'\{.*\}', content, re.DOTALL)
         plan_data = json.loads(json_match.group() if json_match else content)
-        tools = plan_data.get("tools") or ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_law"]
+        tools = plan_data.get("tools") or [
+            "search_cases", "search_taxlaw_prec", "search_taxtr",
+            "search_law", "search_issue_cache", "search_pdf_cases",
+        ]
         law_query = plan_data.get("law_query") or state["query"]
         prec_query = plan_data.get("prec_query") or state["query"]
         taxtr_query = plan_data.get("taxtr_query") or state["query"]
     except Exception:
-        tools = ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_law", "search_issue_cache"]
+        tools = [
+            "search_cases", "search_taxlaw_prec", "search_taxtr",
+            "search_law", "search_issue_cache", "search_pdf_cases",
+        ]
         law_query = prec_query = taxtr_query = state["query"]
 
     return {
@@ -147,7 +160,10 @@ def supervisor_node(state: MultiAgentState) -> dict:
     }
 
 
-_VALID_TOOLS = {"search_cases", "search_law", "search_taxlaw_prec", "search_taxtr", "search_issue_cache"}
+_VALID_TOOLS = {
+    "search_cases", "search_law", "search_taxlaw_prec",
+    "search_taxtr", "search_issue_cache", "search_pdf_cases",
+}
 
 def _route_supervisor(state: MultiAgentState) -> str:
     done = set(state.get("done_tools") or [])
@@ -234,7 +250,29 @@ def taxtr_node(state: MultiAgentState) -> dict:
     }
 
 
-# ── 6. Issue Cache Search (로컬 bravo 분석 완료 판결문) ──────────────────────────
+# ── 6. PDF Court Cases Search (Chroma pdf_court_cases) ──────────────────────
+
+def pdf_cases_node(state: MultiAgentState) -> dict:
+    """uploads/ + CASE/ PDF 판례 원문 임베딩에서 벡터 검색."""
+    query = state.get("prec_query") or state["query"]
+    if _is_itcl_query(state["query"]):
+        # ITCL 관련 쿼리면 전용 쿼리로 검색
+        results = _chroma_pdf(_ITCL_PREC_QUERY, n=6)
+        extra = _chroma_pdf(query, n=4)
+        seen = {r.get("case_id", "") for r in results}
+        for r in extra:
+            if r.get("case_id", "") not in seen:
+                results.append(r)
+                seen.add(r.get("case_id", ""))
+    else:
+        results = _chroma_pdf(query, n=6)
+    return {
+        "pdf_case_results": results[:8],
+        "done_tools": ["search_pdf_cases"],
+    }
+
+
+# ── 7. Issue Cache Search (bravo 분석 완료 판결문) ──────────────────────────
 
 def issue_cache_node(state: MultiAgentState) -> dict:
     """bravo 파이프라인으로 분석 완료된 판결문 캐시에서 구조화 쟁점 검색."""
@@ -249,7 +287,7 @@ def issue_cache_node(state: MultiAgentState) -> dict:
     return {"issue_cache_results": results, "done_tools": ["search_issue_cache"]}
 
 
-# ── 7. Synthesizer ────────────────────────────────────────────────────────────
+# ── 8. Synthesizer ────────────────────────────────────────────────────────────
 
 def synthesizer_node(state: MultiAgentState) -> dict:
     case_block = _fmt_cases(state.get("case_results") or [])
@@ -257,15 +295,18 @@ def synthesizer_node(state: MultiAgentState) -> dict:
     law_block = _fmt_law_articles(state.get("law_articles") or [])
     prec_block = _fmt_chroma_prec(state.get("taxlaw_prec_results") or [])
     taxtr_block = _fmt_chroma_taxtr(state.get("taxtr_results") or [])
+    pdf_block = _fmt_pdf_cases(state.get("pdf_case_results") or [])
     cache_block = _fmt_issue_cache(state.get("issue_cache_results") or [])
 
     has_law = bool(state.get("law_articles"))
     has_prec = bool(state.get("taxlaw_prec_results"))
     has_taxtr = bool(state.get("taxtr_results"))
+    has_pdf = bool(state.get("pdf_case_results"))
     has_cache = bool(state.get("issue_cache_results"))
-    law_section = f"\n[세법 조문 검색 결과 (14개 세법)]\n{law_block}\n" if has_law else ""
+    law_section = f"\n[세법 조문 검색 결과 (14개 세법, 국조법 포함)]\n{law_block}\n" if has_law else ""
     prec_section = f"\n[NTS 법원 판례 (taxlaw) 검색 결과]\n{prec_block}\n" if has_prec else ""
     taxtr_section = f"\n[조세심판원 재결례 검색 결과]\n{taxtr_block}\n" if has_taxtr else ""
+    pdf_section = f"\n[PDF 원문 판례 (이전가격·국제조세 핵심 판결)]\n{pdf_block}\n" if has_pdf else ""
     cache_section = f"\n[구조화 판결 분석 캐시 (bravo 분석 완료)]\n{cache_block}\n" if has_cache else ""
 
     prompt = (
@@ -277,6 +318,7 @@ def synthesizer_node(state: MultiAgentState) -> dict:
         f"{law_section}"
         f"{prec_section}"
         f"{taxtr_section}"
+        f"{pdf_section}"
         f"{cache_section}"
         "[보고서 구성 — 반드시 아래 순서]\n"
         "1. 핵심 요약 (2~3문장): 판례·재결례 흐름과 법령 구조를 한 번에 정리\n"
@@ -400,6 +442,20 @@ def _fmt_chroma_taxtr(items: list) -> str:
     return "\n".join(lines) or "(없음)"
 
 
+def _fmt_pdf_cases(items: list) -> str:
+    if not items:
+        return "(PDF 판례 결과 없음)"
+    lines = []
+    for it in items[:6]:
+        case_id = it.get("case_id") or it.get("case_no", "")
+        court = it.get("court", "")
+        tax_type = it.get("tax_type", "")
+        doc = (it.get("document") or "")[:200]
+        sim = it.get("similarity", 0)
+        lines.append(f"• [{case_id}] {court} {tax_type} | 유사도:{sim:.2f}\n  {doc}")
+    return "\n".join(lines) or "(없음)"
+
+
 # ── Graph ─────────────────────────────────────────────────────────────────────
 
 def _build_graph():
@@ -409,6 +465,7 @@ def _build_graph():
     g.add_node("search_law", law_search_node)
     g.add_node("search_taxlaw_prec", taxlaw_prec_node)
     g.add_node("search_taxtr", taxtr_node)
+    g.add_node("search_pdf_cases", pdf_cases_node)
     g.add_node("search_issue_cache", issue_cache_node)
     g.add_node("synthesizer", synthesizer_node)
 
@@ -421,6 +478,7 @@ def _build_graph():
             "search_law": "search_law",
             "search_taxlaw_prec": "search_taxlaw_prec",
             "search_taxtr": "search_taxtr",
+            "search_pdf_cases": "search_pdf_cases",
             "search_issue_cache": "search_issue_cache",
             "synthesizer": "synthesizer",
         },
@@ -429,6 +487,7 @@ def _build_graph():
     g.add_edge("search_law", "supervisor")
     g.add_edge("search_taxlaw_prec", "supervisor")
     g.add_edge("search_taxtr", "supervisor")
+    g.add_edge("search_pdf_cases", "supervisor")
     g.add_edge("search_issue_cache", "supervisor")
     g.add_edge("synthesizer", END)
     return g.compile()
@@ -444,7 +503,8 @@ class SupervisorAgent:
       - Neo4j LegalGraphSearch (국제조세 판례)
       - Chroma taxlaw_prec (NTS 법원 판례 32,628건)
       - Chroma taxtr_cases (조세심판원 재결례 2,463건)
-      - Chroma law_articles (14개 세법 조문 6,687건)
+      - Chroma law_articles (14개 세법 조문 6,687건, 국조법 포함)
+      - Chroma pdf_court_cases (PDF 판례 원문 임베딩 — scripts/embed_pdf_cases.py 생성)
       - issue_vector_index (bravo 분석 완료 판결문 270건, issue_index/issue_vectors.pkl)
     """
 
@@ -465,6 +525,7 @@ class SupervisorAgent:
             "law_articles": None,
             "taxlaw_prec_results": None,
             "taxtr_results": None,
+            "pdf_case_results": None,
             "issue_cache_results": None,
             "final_report": None,
         }
@@ -480,6 +541,7 @@ class SupervisorAgent:
             "taxlaw_prec_context": final.get("taxlaw_prec_results") or [],
             "taxtr_context": final.get("taxtr_results") or [],
             "law_articles_context": final.get("law_articles") or [],
+            "pdf_cases_context": final.get("pdf_case_results") or [],
             "issue_cache_context": final.get("issue_cache_results") or [],
             "tools_used": final.get("done_tools") or [],
         }

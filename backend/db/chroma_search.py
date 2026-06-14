@@ -1,5 +1,6 @@
 # db/chroma_search.py — 공유 Chroma 검색 유틸리티
 # taxlaw_prec (32,628 법원 판례) / taxtr_cases (2,463 조세심판) / law_articles (6,687 조문)
+# pdf_court_cases (PDF 판례 임베딩) — scripts/embed_pdf_cases.py 로 생성
 # DB는 text-embedding-3-small (1536차원)으로 빌드됨 → 쿼리도 동일 모델 사용 필수
 
 import os
@@ -115,6 +116,25 @@ def search_law_articles(query: str, n: int = 6) -> list:
         for i, (meta, dist) in enumerate(zip(results["metadatas"][0], results["distances"][0])):
             doc_text = documents[i] if i < len(documents) else ""
             docs.append({**meta, "document": doc_text or "", "similarity": round(1 - dist, 4)})
+        return docs
+    except Exception:
+        return []
+
+
+def search_pdf_court_cases(query: str, n: int = 6) -> list:
+    """PDF 판례 임베딩 벡터 검색 (pdf_court_cases 컬렉션)."""
+    try:
+        col = _get_client().get_collection("pdf_court_cases", embedding_function=_get_ef())
+        results = col.query(
+            query_texts=[query],
+            n_results=min(n, 50),
+            include=["metadatas", "distances", "documents"],
+        )
+        docs = []
+        documents = results.get("documents", [[]])[0] or []
+        for i, (meta, dist) in enumerate(zip(results["metadatas"][0], results["distances"][0])):
+            doc_text = documents[i] if i < len(documents) else ""
+            docs.append({**meta, "document": (doc_text or "")[:600], "similarity": round(1 - dist, 4)})
         return docs
     except Exception:
         return []
