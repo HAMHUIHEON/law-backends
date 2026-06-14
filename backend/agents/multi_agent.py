@@ -101,55 +101,44 @@ def supervisor_node(state: MultiAgentState) -> dict:
     if state["plan"] and state["iteration"] > 0:
         return {"iteration": state["iteration"] + 1}
 
-    prompt = (
-        "당신은 세법 법률 리서치 슈퍼바이저다.\n"
-        "아래 질문을 분석해 필요한 검색 도구와 각 소스별 최적화 검색쿼리를 JSON으로 반환하라.\n\n"
-        f"질문: {state['query']}\n\n"
-        "반환 형식 (JSON만, 다른 텍스트 없음):\n"
-        '{\n'
-        '  "tools": ["search_cases", "search_taxlaw_prec", "search_taxtr", "search_law", "search_issue_cache", "search_pdf_cases"],\n'
-        '  "law_query": "세법 조문 검색용 — 법령명·조문·핵심 법적 개념 키워드 중심으로 확장",\n'
-        '  "prec_query": "법원 판례 검색용 — 세목·사실관계·핵심 쟁점 키워드 중심으로 확장",\n'
-        '  "taxtr_query": "조세심판 재결례 검색용 — 처분유형·세목·쟁점 키워드 중심으로 확장"\n'
-        '}\n\n'
-        "사용 가능한 도구:\n"
-        "  - search_cases: Neo4j 국제조세 판례 DB 벡터 검색 + 승소 패턴 분석\n"
-        "  - search_law: 세법 조문 검색 (14개 세법 법+령+규칙 6,687조문, 국조법 포함)\n"
-        "  - search_taxlaw_prec: NTS taxlaw 법원 판례 32,628건 (국승/국패 분류)\n"
-        "  - search_taxtr: 조세심판원 재결례 2,463건\n"
-        "  - search_issue_cache: bravo 분석 완료 판결문 (270건 구조화 쟁점·소결론·인용법령)\n"
-        "  - search_pdf_cases: PDF 원문 판례 전문 임베딩 (이전가격·국제조세 핵심 판결 300+건)\n\n"
-        "도구 선택 규칙:\n"
-        "  - 판례·법원 결정·국승/국패 → search_cases + search_taxlaw_prec 포함\n"
-        "  - 이전가격·국제조세·정상가격 → search_pdf_cases + search_issue_cache 반드시 포함\n"
-        "  - 조세심판·재결례 → search_taxtr 포함\n"
-        "  - 조문·법령 해석 → search_law 포함\n"
-        "  - 종합 분석·전략·쟁점 분석 → 6개 모두 포함\n\n"
-        "쿼리 최적화 규칙:\n"
-        "  - law_query: 법령명+핵심 법적 개념. 이전가격/국제조세/정상가격 관련이면 반드시\n"
-        "    '국제조세조정법 정상가격 독립기업원칙 국외특수관계인 이전가격'을 포함.\n"
-        "  - prec_query: 세목+사실관계. 이전가격이면 '법인세 이전가격 정상가격 국외특수관계법인 과세처분 경정'.\n"
-        "  - taxtr_query: 처분 유형+쟁점. 이전가격이면 '이전가격 과세처분 조세심판 정상가격 경정'.\n"
-        "  ※ 쿼리는 한국어 세법 DB 벡터 검색용이므로 최대한 구체적 법적 용어를 사용할 것."
-    )
-    resp = _get_llm().invoke([HumanMessage(content=prompt)])
-    try:
-        content = resp.content.strip()
-        json_match = re.search(r'\{.*\}', content, re.DOTALL)
-        plan_data = json.loads(json_match.group() if json_match else content)
-        tools = plan_data.get("tools") or [
-            "search_cases", "search_taxlaw_prec", "search_taxtr",
-            "search_law", "search_issue_cache", "search_pdf_cases",
-        ]
-        law_query = plan_data.get("law_query") or state["query"]
-        prec_query = plan_data.get("prec_query") or state["query"]
-        taxtr_query = plan_data.get("taxtr_query") or state["query"]
-    except Exception:
-        tools = [
-            "search_cases", "search_taxlaw_prec", "search_taxtr",
-            "search_law", "search_issue_cache", "search_pdf_cases",
-        ]
-        law_query = prec_query = taxtr_query = state["query"]
+    # 도구는 항상 6개 모두 사용 — LLM에게 선택권 주지 않음
+    tools = [
+        "search_cases", "search_taxlaw_prec", "search_taxtr",
+        "search_law", "search_issue_cache", "search_pdf_cases",
+    ]
+
+    # ITCL/이전가격 쿼리면 전용 쿼리 고정, 아니면 LLM으로 최적화
+    if _is_itcl_query(state["query"]):
+        law_query = _ITCL_LAW_QUERY
+        prec_query = _ITCL_PREC_QUERY
+        taxtr_query = "이전가격 과세처분 조세심판 정상가격 경정 국외특수관계인 법인세"
+    else:
+        prompt = (
+            "당신은 세법 법률 리서치 슈퍼바이저다.\n"
+            "아래 질문에 대해 각 소스별 최적화 검색쿼리를 JSON으로 반환하라.\n\n"
+            f"질문: {state['query']}\n\n"
+            "반환 형식 (JSON만, 다른 텍스트 없음):\n"
+            '{\n'
+            '  "law_query": "세법 조문 검색용 — 법령명·조문·핵심 법적 개념 키워드 중심으로 확장",\n'
+            '  "prec_query": "법원 판례 검색용 — 세목·사실관계·핵심 쟁점 키워드 중심으로 확장",\n'
+            '  "taxtr_query": "조세심판 재결례 검색용 — 처분유형·세목·쟁점 키워드 중심으로 확장"\n'
+            '}\n\n'
+            "쿼리 최적화 규칙:\n"
+            "  - law_query: 법령명+핵심 법적 개념 키워드. 가능하면 조문번호 포함.\n"
+            "  - prec_query: 세목(법인세/소득세/부가세 등)+사실관계+핵심 쟁점 키워드.\n"
+            "  - taxtr_query: 처분 유형(경정/부과/취소)+세목+쟁점 키워드.\n"
+            "  ※ 한국어 세법 DB 벡터 검색용이므로 최대한 구체적 법적 용어 사용."
+        )
+        resp = _get_llm().invoke([HumanMessage(content=prompt)])
+        try:
+            content = resp.content.strip()
+            json_match = re.search(r'\{.*\}', content, re.DOTALL)
+            plan_data = json.loads(json_match.group() if json_match else content)
+            law_query = plan_data.get("law_query") or state["query"]
+            prec_query = plan_data.get("prec_query") or state["query"]
+            taxtr_query = plan_data.get("taxtr_query") or state["query"]
+        except Exception:
+            law_query = prec_query = taxtr_query = state["query"]
 
     return {
         "plan": tools,
@@ -199,17 +188,20 @@ def case_search_node(state: MultiAgentState) -> dict:
 
 def law_search_node(state: MultiAgentState) -> dict:
     query = state.get("law_query") or state["query"]
-    results = _chroma_law(query, n=8)
 
-    # 이전가격/국제조세 쿼리면 ITCL 전용 fallback 검색으로 보강
+    # ITCL/이전가격 쿼리면 국조법 전용 쿼리 결과를 앞에 배치하고, 보조 쿼리를 뒤에 붙임
     if _is_itcl_query(state["query"]):
-        itcl_results = _chroma_law(_ITCL_LAW_QUERY, n=6)
-        seen = {(r.get("law_name", ""), r.get("article_no", "")) for r in results}
-        for r in itcl_results:
+        itcl_results = _chroma_law(_ITCL_LAW_QUERY, n=8)
+        extra = _chroma_law(query, n=6)
+        seen = {(r.get("law_name", ""), r.get("article_no", "")) for r in itcl_results}
+        for r in extra:
             key = (r.get("law_name", ""), r.get("article_no", ""))
             if key not in seen:
-                results.append(r)
+                itcl_results.append(r)
                 seen.add(key)
+        results = itcl_results
+    else:
+        results = _chroma_law(query, n=10)
 
     return {
         "law_articles": results[:10],

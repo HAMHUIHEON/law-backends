@@ -10,13 +10,18 @@ from pathlib import Path
 CHROMA_DIR = Path(os.environ.get("CHROMA_DIR", "/app/chroma"))
 CHROMA_URL = os.environ.get("CHROMA_DOWNLOAD_URL", "")
 # 이 버전 번호를 올리면 Railway Volume의 기존 데이터를 삭제하고 재다운로드
-CHROMA_VERSION = "v3"
+CHROMA_VERSION = "v4"
 
 version_file = CHROMA_DIR / ".chroma_version"
 
 
+def _chroma_sqlite_exists() -> bool:
+    """chromadb 버전에 따라 sqlite3 위치가 달라질 수 있어 두 경로 모두 확인."""
+    return (CHROMA_DIR / "chroma.sqlite3").exists() or (CHROMA_DIR / "chroma" / "chroma.sqlite3").exists()
+
+
 def _is_current():
-    if not (CHROMA_DIR / "chroma.sqlite3").exists():
+    if not _chroma_sqlite_exists():
         return False
     if not version_file.exists():
         return False
@@ -54,7 +59,20 @@ subprocess.run(
 print(f"[init_chroma] 압축 해제 → {CHROMA_DIR}")
 if dl_path.suffix in (".gz", ".tgz") or str(dl_path).endswith(".tar.gz"):
     with tarfile.open(dl_path, "r:gz") as tf:
-        tf.extractall(str(CHROMA_DIR))
+        members = tf.getmembers()
+        # tar 내부에 최상위 'chroma/' 디렉토리가 있으면 프리픽스 제거 후 추출
+        top_dirs = {m.name.split("/")[0] for m in members if m.name}
+        strip_prefix = None
+        if len(top_dirs) == 1 and list(top_dirs)[0] == "chroma":
+            strip_prefix = "chroma"
+        for member in members:
+            if strip_prefix and member.name.startswith(strip_prefix + "/"):
+                member.name = member.name[len(strip_prefix) + 1:]
+                if not member.name:  # 프리픽스 자체 엔트리 건너뜀
+                    continue
+            elif strip_prefix and member.name == strip_prefix:
+                continue
+            tf.extract(member, str(CHROMA_DIR))
 else:
     with zipfile.ZipFile(dl_path) as zf:
         for member in zf.infolist():

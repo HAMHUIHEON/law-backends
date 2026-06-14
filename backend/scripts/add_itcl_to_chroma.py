@@ -18,7 +18,13 @@ def run():
         print("[add_itcl] data file not found:", DATA_FILE, "- skip")
         return
 
-    if not (CHROMA_DIR / "chroma.sqlite3").exists():
+    # chromadb 0.6.x stores sqlite at {CHROMA_DIR}/chroma/chroma.sqlite3
+    # older versions at {CHROMA_DIR}/chroma.sqlite3
+    sqlite_paths = [
+        CHROMA_DIR / "chroma.sqlite3",
+        CHROMA_DIR / "chroma" / "chroma.sqlite3",
+    ]
+    if not any(p.exists() for p in sqlite_paths):
         print("[add_itcl] Chroma DB not found:", CHROMA_DIR, "- skip")
         return
 
