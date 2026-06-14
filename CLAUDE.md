@@ -264,6 +264,7 @@ CLERK_ISSUER=https://...clerk.accounts.dev
 | MULTI PDF 판례 검색 추가 | ✅ | `search_pdf_cases` 6번째 도구 — pdf_court_cases 560건, ITCL 키워드 우선순위 (`3655d799`) |
 | MULTI UI PDF/쟁점 섹션 추가 | ✅ | `pdf_cases_context` + `issue_cache_context` 렌더링 — Vercel `e406fdf` 배포 |
 | Vercel API_BASE 수정 | ✅ | `.env.production` + fallback 코드 → Railway URL. lapis.nexus 정상 확인 (`50ee8ca`, `09a0419`) |
+| `mcp_server.py` 에이전트 툴 완성 | ✅ | 17개 툴 전부 구현. `run_supervisor_agent` 설명 6개 소스로 업데이트 |
 
 ## Chroma 검색 중요 주의사항
 
@@ -272,10 +273,9 @@ Chroma 기본(ONNX 384-dim) ≠ 빌드 시 사용한 OpenAI text-embedding-3-sma
 
 ## 다음 세션 시작 항목
 
-1. **`mcp_server.py` 업데이트** — strategy/rebuttal/trend/itcl/risk 5개 에이전트 툴 추가
-2. **질의회신 벡터 DB** — `cases/inquiry/` 다운로드 후 Chroma 빌드
-3. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
-4. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
+1. **질의회신 벡터 DB** — `cases/inquiry/` 다운로드 후 Chroma 빌드
+2. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
+3. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
 
 ## issue_index 구조 (캐시 쟁점 벡터 인덱스)
 

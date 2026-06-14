@@ -346,14 +346,20 @@ def _get_supervisor_agent():
 @mcp.tool()
 def run_supervisor_agent(query: str) -> str:
     """
-    SupervisorAgent: 판례 DB + 14개 세법 조문(6,687건) + NTS 법원 판례(32,628건)
-    + 조세심판 재결례(2,463건)를 동시에 탐색해 통합 보고서를 생성합니다.
+    SupervisorAgent (종합 리서치): 6개 소스를 동시에 탐색해 통합 보고서를 생성합니다.
+    - Neo4j 판례 DB (국제조세 구조화 판례)
+    - Chroma law_articles: 14개 세법 조문 6,687건
+    - Chroma taxlaw_prec: NTS 법원 판례 32,628건
+    - Chroma taxtr_cases: 조세심판 재결례 2,463건
+    - issue_index: 사전 분석 쟁점 벡터 1,021건
+    - Chroma pdf_court_cases: PDF 원본 판결문 560건
+    이전가격(ITCL) 관련 쿼리는 국조법 조문·판례를 우선 탐색합니다.
 
     Args:
-        query: 분석할 질문 (예: "이전가격 정상가격 산출 방법별 판례 비교")
+        query: 분석할 질문 (예: "이전가격 과소신고 관련 판례와 세법 법령 종합 분석")
 
     Returns:
-        통합 보고서 — 판례 컨텍스트 + 법령 조문 근거 + 재결례 + 전략 분석
+        통합 보고서 — 판례 컨텍스트 + 법령 조문 + 재결례 + PDF 판례 + 쟁점 캐시
     """
     try:
         agent = _get_supervisor_agent()
@@ -363,6 +369,8 @@ def run_supervisor_agent(query: str) -> str:
         law_ctx = result.get("law_articles_context")
         prec_ctx = result.get("taxlaw_prec_context")
         taxtr_ctx = result.get("taxtr_context")
+        pdf_ctx = result.get("pdf_cases_context")
+        issue_ctx = result.get("issue_cache_context")
 
         output_parts = [report]
         if case_ctx:
@@ -373,6 +381,10 @@ def run_supervisor_agent(query: str) -> str:
             output_parts.append(f"\n---\nNTS 법원 판례:\n{json.dumps(prec_ctx, ensure_ascii=False, indent=2)}")
         if taxtr_ctx:
             output_parts.append(f"\n---\n조세심판 재결례:\n{json.dumps(taxtr_ctx, ensure_ascii=False, indent=2)}")
+        if pdf_ctx:
+            output_parts.append(f"\n---\nPDF 판결문:\n{json.dumps(pdf_ctx, ensure_ascii=False, indent=2)}")
+        if issue_ctx:
+            output_parts.append(f"\n---\n구조화 쟁점 캐시:\n{json.dumps(issue_ctx, ensure_ascii=False, indent=2)}")
 
         return "\n".join(output_parts)
     except Exception as e:
