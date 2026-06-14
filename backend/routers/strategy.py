@@ -36,10 +36,20 @@ def _get_risk():
 
 class CaseRequest(BaseModel):
     summary: str
+    disposition_date: Optional[str] = ""     # YYYY-MM-DD — 불복 기한 자동 계산
+    tax_amount: Optional[str] = ""           # 처분 세액 (참고용)
+    already_filed: Optional[bool] = False    # 이미 불복 절차 진행 중인지
 
 
 class RebuttalRequest(BaseModel):
     disposition_text: str
+    filing_type: Optional[str] = "심판청구"        # "이의신청" | "심판청구" | "행정소송"
+    taxpayer_name: Optional[str] = ""
+    taxpayer_id: Optional[str] = ""              # 사업자등록번호 또는 주민등록번호
+    tax_office: Optional[str] = ""               # 처분청
+    disposition_date: Optional[str] = ""         # YYYY-MM-DD
+    tax_amount: Optional[str] = ""
+    tax_type: Optional[str] = ""                 # "법인세" | "소득세" | "부가가치세" 등
 
 
 class RiskRequest(BaseModel):
@@ -50,11 +60,16 @@ class RiskRequest(BaseModel):
 
 @router.post("/strategy")
 def analyze_strategy(req: CaseRequest):
-    """의뢰인 사건 요약 → 유사 판례 검색 + 불복전략 보고서."""
+    """의뢰인 사건 요약 → 유사 판례 검색 + 불복전략 보고서 (불복 기한 자동 계산 포함)."""
     if not req.summary.strip():
         raise HTTPException(status_code=400, detail="summary가 비어 있습니다.")
     try:
-        result = _get_strategy().run(client_summary=req.summary.strip())
+        result = _get_strategy().run(
+            client_summary=req.summary.strip(),
+            disposition_date=req.disposition_date or "",
+            tax_amount=req.tax_amount or "",
+            already_filed=req.already_filed or False,
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"에이전트 오류: {e}")
     return {
@@ -62,16 +77,26 @@ def analyze_strategy(req: CaseRequest):
         "court_cases": result.get("court_cases"),
         "taxtr_cases": result.get("taxtr_cases"),
         "law_articles": result.get("law_articles"),
+        "deadlines": result.get("deadlines"),
     }
 
 
 @router.post("/rebuttal")
 def generate_rebuttal(req: RebuttalRequest):
-    """과세처분 이유서 텍스트 → 납세자 승소 판례 검색 + 반론 초안."""
+    """과세처분 이유서 텍스트 → 납세자 승소 판례 검색 + 반론/불복 문서 초안."""
     if not req.disposition_text.strip():
         raise HTTPException(status_code=400, detail="disposition_text가 비어 있습니다.")
     try:
-        result = _get_rebuttal().run(disposition_text=req.disposition_text.strip())
+        result = _get_rebuttal().run(
+            disposition_text=req.disposition_text.strip(),
+            filing_type=req.filing_type or "심판청구",
+            taxpayer_name=req.taxpayer_name or "",
+            taxpayer_id=req.taxpayer_id or "",
+            tax_office=req.tax_office or "",
+            disposition_date=req.disposition_date or "",
+            tax_amount=req.tax_amount or "",
+            tax_type=req.tax_type or "",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"에이전트 오류: {e}")
     return {
@@ -79,6 +104,8 @@ def generate_rebuttal(req: RebuttalRequest):
         "winning_court_cases": result.get("winning_court_cases"),
         "favorable_taxtr_cases": result.get("favorable_taxtr_cases"),
         "law_articles": result.get("law_articles"),
+        "unverified_citations": result.get("unverified_citations"),
+        "deadlines": result.get("deadlines"),
     }
 
 

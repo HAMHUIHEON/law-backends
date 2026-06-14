@@ -47,7 +47,9 @@ def _get_llm():
         _llm = get_llm(model=DEFAULT_MODEL, temperature=0)
     return _llm
 
-_MAX_RETRIES = 1
+_MAX_RETRIES = 2
+_SIMILARITY_THRESHOLD = 0.60   # 전체 결과의 최고 유사도가 이 미만이면 품질 낮음으로 판정
+_MIN_RESULTS_COUNT = 3          # 결과 N건 미만이면 재시도
 
 
 # ── State ─────────────────────────────────────────────────────────────────────
@@ -174,23 +176,78 @@ def insight_node(state: InsightState) -> InsightState:
 
 # ── 4. Critic ─────────────────────────────────────────────────────────────────
 
+def _assess_result_quality(results: list, query: str) -> tuple[bool, str]:
+    """
+    검색 결과 품질 평가.
+    Returns (should_retry: bool, reason: str)
+    """
+    # 1. 결과 건수 부족
+    if len(results) < _MIN_RESULTS_COUNT:
+        return True, f"결과 {len(results)}건 — 최소 {_MIN_RESULTS_COUNT}건 미달"
+
+    # 2. 유사도 임계값 — 최고 유사도가 낮으면 관련성 없는 판례만 검색된 것
+    scores = [r.get("similarity", 0) for r in results if isinstance(r, dict)]
+    if scores:
+        max_sim = max(scores)
+        if max_sim < _SIMILARITY_THRESHOLD:
+            return True, f"최고 유사도 {max_sim:.3f} < 임계값 {_SIMILARITY_THRESHOLD} — 관련 판례 미검색 의심"
+
+    # 3. LLM 관련성 판단 (유사도 경계값 영역: threshold ≤ max_sim < threshold+0.1)
+    if scores and _SIMILARITY_THRESHOLD <= max(scores) < _SIMILARITY_THRESHOLD + 0.10:
+        result_preview = "\n".join(
+            f"- {r.get('case_number', '')} | 쟁점: {str(r.get('issue', ''))[:60]}"
+            for r in results[:5]
+            if isinstance(r, dict)
+        )
+        prompt = (
+            "아래 판례 검색 결과가 질문과 실질적으로 관련 있는지 평가하라.\n\n"
+            f"[질문] {query}\n\n"
+            f"[검색된 판례 목록]\n{result_preview}\n\n"
+            "판단 기준:\n"
+            "- RELEVANT: 판례가 질문의 법적 쟁점을 직접 다루고 있음\n"
+            "- IRRELEVANT: 판례가 질문과 다른 법적 쟁점에 관한 것\n\n"
+            'JSON으로만 반환: {"verdict": "RELEVANT" | "IRRELEVANT", "reason": "한 문장"}'
+        )
+        try:
+            resp = _get_llm().invoke([HumanMessage(content=prompt)])
+            judgment = json.loads(resp.content.strip().removeprefix("```json").removesuffix("```").strip())
+            if judgment.get("verdict") == "IRRELEVANT":
+                return True, f"LLM 관련성 판단: IRRELEVANT — {judgment.get('reason', '')}"
+        except Exception:
+            pass
+
+    return False, "sufficient"
+
+
 def critic_node(state: InsightState) -> InsightState:
     """
-    결과 충분성 평가. 판례가 한 건도 없으면 검색어를 원본 질문으로 확장해 재시도.
-    MAX_RETRIES 초과 시 부족한 채로 보고서 단계로 진행.
-    """
-    search_count = len(state.get("search_results") or [])
-    should_retry = (search_count == 0) and (state["retry_count"] < _MAX_RETRIES)
+    결과 품질 3단계 평가:
+    1. 건수 부족 (< _MIN_RESULTS_COUNT)
+    2. 유사도 임계값 미달 (최고 similarity < _SIMILARITY_THRESHOLD)
+    3. LLM 관련성 판단 (경계값 영역 — similarity 0.60~0.70)
 
-    extended_queries = (
-        state["search_queries"] + [state["query"]]
-        if should_retry
-        else state["search_queries"]
-    )
+    재시도 시 원본 질문 + 대안 검색어 추가.
+    _MAX_RETRIES 초과 시 부족한 채로 보고서 단계로 진행.
+    """
+    results = state.get("search_results") or []
+    can_retry = state["retry_count"] < _MAX_RETRIES
+
+    should_retry, reason = _assess_result_quality(results, state["query"])
+    do_retry = should_retry and can_retry
+
+    if do_retry:
+        # 검색어 다각화: 원본 질문 + 더 포괄적인 fallback 쿼리
+        extended_queries = list(dict.fromkeys(
+            state["search_queries"]
+            + [state["query"]]
+            + [f"{q} 과세관청 처분 납세자 불복" for q in state["search_queries"][:1]]
+        ))
+    else:
+        extended_queries = state["search_queries"]
 
     return {
         **state,
-        "reflection": "retry" if should_retry else "sufficient",
+        "reflection": "retry" if do_retry else "sufficient",
         "retry_count": state["retry_count"] + 1,
         "search_queries": extended_queries,
     }
