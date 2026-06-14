@@ -137,12 +137,13 @@
 | ITCLAgent | `agents/itcl_agent.py` | `POST /api/itcl/ask` | Chroma 2종 + Neo4j ITCLSearch |
 | RiskAgent | `agents/risk_agent.py` | `POST /api/strategy/risk` | Chroma 3종 |
 
-**MULTI 에이전트 검색 소스 (5개)**:
+**MULTI 에이전트 검색 소스 (6개)**:
 1. `search_cases` — Neo4j 벡터 검색 (국제조세 판례)
 2. `search_law` — Chroma `law_articles` (14개 세법 조문 6,687건)
 3. `search_taxlaw_prec` — Chroma `taxlaw_prec` (NTS 법원 판례 32,628건)
 4. `search_taxtr` — Chroma `taxtr_cases` (조세심판 재결례 2,463건)
 5. `search_issue_cache` — `issue_index/issue_vectors.pkl` (사전 분석 판례 쟁점 벡터, 1021건·270판례)
+6. `search_pdf_cases` — Chroma `pdf_court_cases` (PDF 원본 판결문 560건)
 
 ---
 
@@ -249,7 +250,7 @@ CLERK_ISSUER=https://...clerk.accounts.dev
 
 ---
 
-## 완료 현황 (2026-06-13)
+## 완료 현황 (2026-06-14)
 
 | 항목 | 상태 | 내용 |
 |------|------|------|
@@ -260,6 +261,9 @@ CLERK_ISSUER=https://...clerk.accounts.dev
 | Railway Chroma 검색 동작 | ✅ | openai v1.x 호환 커스텀 EF 사용 (`475e0e2d`) |
 | ITCL 법령 Chroma 통합 | ✅ | v2 아카이브에 이미 포함 확인. cold-start `add_itcl_to_chroma.py` 추가 |
 | MULTI 캐시 쟁점 검색 추가 | ✅ | `search_issue_cache` 5번째 도구 — issue_index 1021건 로드 (`865f5d41`) |
+| MULTI PDF 판례 검색 추가 | ✅ | `search_pdf_cases` 6번째 도구 — pdf_court_cases 560건, ITCL 키워드 우선순위 (`3655d799`) |
+| MULTI UI PDF/쟁점 섹션 추가 | ✅ | `pdf_cases_context` + `issue_cache_context` 렌더링 — Vercel `e406fdf` 배포 |
+| Vercel API_BASE 수정 | ✅ | `.env.production` + fallback 코드 → Railway URL. lapis.nexus 정상 확인 (`50ee8ca`, `09a0419`) |
 
 ## Chroma 검색 중요 주의사항
 
@@ -268,10 +272,11 @@ Chroma 기본(ONNX 384-dim) ≠ 빌드 시 사용한 OpenAI text-embedding-3-sma
 
 ## 다음 세션 시작 항목
 
-1. **`mcp_server.py` 업데이트** — strategy/rebuttal/trend/itcl/risk 5개 에이전트 툴 추가
-2. **질의회신 벡터 DB** — `cases/inquiry/` 다운로드 재실행 후 Chroma 빌드
-3. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
-4. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
+1. **Neo4j URI 업데이트** — Railway Variables → `NEO4J_URI=neo4j+s://a0c49c04.databases.neo4j.io` 변경 후 redeploy
+2. **`mcp_server.py` 업데이트** — strategy/rebuttal/trend/itcl/risk 5개 에이전트 툴 추가
+3. **질의회신 벡터 DB** — `cases/inquiry/` 다운로드 후 Chroma 빌드
+4. **bravo 43건 미처리** — `scripts/run_court_pipeline_parallel.py --workers 4` 재실행
+5. **Neo4j 7개 세법 인제스트 (LAW_7)** — 장기 과제
 
 ## issue_index 구조 (캐시 쟁점 벡터 인덱스)
 
