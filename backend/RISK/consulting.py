@@ -1,12 +1,16 @@
 import json
+import os
 import urllib.parse
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel
 
-# 법령 JSON DB — 29_FINAL/law/ (로컬 전용, git/Railway 제외)
-LAW_DIR = Path(__file__).parent.parent.parent / "law"
+# 법령 JSON DB — Railway: /app/law (LAW_DIR env), 로컬: 29_FINAL/law/
+LAW_DIR = Path(
+    os.environ.get("LAW_DIR")
+    or str(Path(__file__).parent.parent.parent / "law")
+)
 
 # 법령명 → 폴더 슬러그
 LAW_SLUGS = {
