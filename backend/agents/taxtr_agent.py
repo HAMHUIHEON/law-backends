@@ -13,19 +13,14 @@ _CHROMA_DIR = Path(
     os.environ.get("CHROMA_DIR")
     or str(Path(__file__).parent.parent.parent / "vector_db" / "chroma")
 )
-_OPENAI_KEY = os.getenv("OPENAI_API_KEY", "")
 _COLLECTION = "taxtr_cases"
 
 
 def _get_col():
     import chromadb
-    from chromadb.utils import embedding_functions
+    from db.chroma_search import _get_ef
     client = chromadb.PersistentClient(path=str(_CHROMA_DIR))
-    ef = embedding_functions.OpenAIEmbeddingFunction(
-        api_key=_OPENAI_KEY or os.getenv("OPENAI_API_KEY", ""),
-        model_name="text-embedding-3-small",
-    )
-    return client.get_collection(_COLLECTION, embedding_function=ef)
+    return client.get_collection(_COLLECTION, embedding_function=_get_ef())
 
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
