@@ -4,6 +4,7 @@ neo4j
 python-dotenv
 langchain-community
 langchain-openai
+langchain-anthropic
 langchain-core
 langchain
 langgraph
